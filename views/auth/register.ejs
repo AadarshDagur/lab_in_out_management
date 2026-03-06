@@ -1,0 +1,144 @@
+<%- include('../partials/header') %>
+
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <h3 class="text-center mb-4">
+            <i class="bi bi-person-plus me-2"></i>Create an Account
+        </h3>
+
+        <!-- Role Selection -->
+        <div class="d-flex justify-content-center mb-4">
+            <div class="btn-group role-selector" role="group">
+                <input type="radio" class="btn-check" name="roleTab" id="regStudent" value="student" checked>
+                <label class="btn btn-outline-primary" for="regStudent">
+                    <i class="bi bi-mortarboard me-1"></i>Student
+                </label>
+
+                <input type="radio" class="btn-check" name="roleTab" id="regAssistant" value="assistant">
+                <label class="btn btn-outline-success" for="regAssistant">
+                    <i class="bi bi-person-badge me-1"></i>Lab Assistant
+                </label>
+            </div>
+        </div>
+        <p class="text-center text-muted mb-3" style="font-size: 0.85rem;">
+            <i class="bi bi-info-circle me-1"></i>Admin accounts can only be created by an existing admin.
+        </p>
+
+        <div class="card shadow" id="registerCard">
+            <div class="card-body p-4">
+                <form action="/auth/register" method="POST">
+                    <input type="hidden" name="role" id="roleInput" value="student">
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">Full Name</label>
+                            <input type="text" class="form-control" id="name" name="name"
+                                   placeholder="John Doe" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">Email Address</label>
+                            <input type="email" class="form-control" id="email" name="email"
+                                   placeholder="you@iitrpr.ac.in" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3" id="enrollmentField">
+                            <label for="enrollment_no" class="form-label">Enrollment Number</label>
+                            <input type="text" class="form-control" id="enrollment_no" name="enrollment_no"
+                                   placeholder="e.g. 2024CS001" required>
+                        </div>
+                        <div class="col-md-6 mb-3" id="staffIdField" style="display: none;">
+                            <label for="staff_id" class="form-label">Staff / Employee ID</label>
+                            <input type="text" class="form-control" id="staff_id" name="enrollment_no"
+                                   placeholder="e.g. STAFF001" disabled>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="department" class="form-label">Department</label>
+                            <select class="form-select" id="department" name="department" required>
+                                <option value="">Select Department</option>
+                                <option value="Computer Science">Computer Science</option>
+                                <option value="Information Technology">Information Technology</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Electrical">Electrical</option>
+                                <option value="Mechanical">Mechanical</option>
+                                <option value="Civil">Civil</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Phone Number (optional)</label>
+                        <input type="tel" class="form-control" id="phone" name="phone"
+                               placeholder="9876543210">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password"
+                                   placeholder="Min 6 characters" required minlength="6">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="confirmPassword" class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control" id="confirmPassword"
+                                   placeholder="Re-enter password" required minlength="6">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 mb-3" id="registerBtn">
+                        <i class="bi bi-person-plus me-1"></i>Register as Student
+                    </button>
+                </form>
+
+                <p class="text-center mb-0">
+                    Already have an account? <a href="/auth/login">Login here</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('input[name="roleTab"]');
+    const roleInput = document.getElementById('roleInput');
+    const registerBtn = document.getElementById('registerBtn');
+    const registerCard = document.getElementById('registerCard');
+    const enrollmentField = document.getElementById('enrollmentField');
+    const staffIdField = document.getElementById('staffIdField');
+    const enrollmentInput = document.getElementById('enrollment_no');
+    const staffIdInput = document.getElementById('staff_id');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('change', () => {
+            const role = tab.value;
+            roleInput.value = role;
+
+            if (role === 'student') {
+                registerBtn.className = 'btn btn-primary w-100 mb-3';
+                registerBtn.innerHTML = '<i class="bi bi-person-plus me-1"></i>Register as Student';
+                registerCard.className = 'card shadow';
+                enrollmentField.style.display = '';
+                staffIdField.style.display = 'none';
+                enrollmentInput.required = true;
+                enrollmentInput.disabled = false;
+                staffIdInput.required = false;
+                staffIdInput.disabled = true;
+            } else {
+                registerBtn.className = 'btn btn-success w-100 mb-3';
+                registerBtn.innerHTML = '<i class="bi bi-person-badge me-1"></i>Register as Lab Assistant';
+                registerCard.className = 'card shadow border-success';
+                enrollmentField.style.display = 'none';
+                staffIdField.style.display = '';
+                enrollmentInput.required = false;
+                enrollmentInput.disabled = true;
+                staffIdInput.required = true;
+                staffIdInput.disabled = false;
+            }
+        });
+    });
+});
+</script>
+
+<%- include('../partials/footer') %>

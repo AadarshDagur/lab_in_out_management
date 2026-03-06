@@ -1,0 +1,81 @@
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUser<%= user.id %>" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit: <%= user.name %></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/users/<%= user.id %>?_method=PUT" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" value="<%= user.name %>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" value="<%= user.email %>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Department</label>
+                        <select class="form-select" name="department">
+                            <option value="Computer Science" <%= user.department === 'Computer Science' ? 'selected' : '' %>>Computer Science</option>
+                            <option value="Information Technology" <%= user.department === 'Information Technology' ? 'selected' : '' %>>Information Technology</option>
+                            <option value="Electronics" <%= user.department === 'Electronics' ? 'selected' : '' %>>Electronics</option>
+                            <option value="Electrical" <%= user.department === 'Electrical' ? 'selected' : '' %>>Electrical</option>
+                            <option value="Mechanical" <%= user.department === 'Mechanical' ? 'selected' : '' %>>Mechanical</option>
+                            <option value="Civil" <%= user.department === 'Civil' ? 'selected' : '' %>>Civil</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone" value="<%= user.phone || '' %>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="is_active">
+                            <option value="true" <%= user.is_active ? 'selected' : '' %>>Active</option>
+                            <option value="false" <%= !user.is_active ? 'selected' : '' %>>Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <!-- Change Role -->
+                    <div class="dropdown me-auto">
+                        <button class="btn btn-outline-warning btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-arrow-repeat me-1"></i>Change Role
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <form action="/users/<%= user.id %>/role?_method=PUT" method="POST" class="d-inline">
+                                    <input type="hidden" name="role" value="student">
+                                    <button type="submit" class="dropdown-item <%= user.role === 'student' ? 'active' : '' %>">
+                                        <i class="bi bi-mortarboard me-1"></i>Student
+                                    </button>
+                                </form>
+                            </li>
+                            <li>
+                                <form action="/users/<%= user.id %>/role?_method=PUT" method="POST" class="d-inline">
+                                    <input type="hidden" name="role" value="assistant">
+                                    <button type="submit" class="dropdown-item <%= user.role === 'assistant' ? 'active' : '' %>">
+                                        <i class="bi bi-person-badge me-1"></i>Lab Assistant
+                                    </button>
+                                </form>
+                            </li>
+                            <li>
+                                <form action="/users/<%= user.id %>/role?_method=PUT" method="POST" class="d-inline">
+                                    <input type="hidden" name="role" value="admin">
+                                    <button type="submit" class="dropdown-item <%= user.role === 'admin' ? 'active' : '' %>">
+                                        <i class="bi bi-shield-lock me-1"></i>Admin
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
