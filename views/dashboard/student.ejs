@@ -46,16 +46,9 @@
                     </div>
 
                     <% if (!activeSession && lab.available_seats > 0) { %>
-                        <form action="/sessions/checkin" method="POST" class="mt-2">
-                            <input type="hidden" name="lab_id" value="<%= lab.id %>">
-                            <div class="mb-2">
-                                <input type="text" name="purpose" class="form-control form-control-sm"
-                                       placeholder="Purpose (e.g. Assignment, Practice)">
-                            </div>
-                            <button type="submit" class="btn btn-success btn-sm w-100">
-                                <i class="bi bi-box-arrow-in-right me-1"></i>Check In
-                            </button>
-                        </form>
+                        <a href="/qr/scan" class="btn btn-info btn-sm w-100 mt-2">
+                            <i class="bi bi-qr-code-scan me-1"></i>Scan QR to Check In
+                        </a>
                     <% } else if (lab.available_seats <= 0) { %>
                         <button class="btn btn-secondary btn-sm w-100 mt-2" disabled>Full</button>
                     <% } %>

@@ -9,10 +9,10 @@ const pool = new Pool({
   ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
-// Test connection
-pool.on("connect", () => {
-  console.log("Connected to PostgreSQL database");
-});
+// Test connection once on startup
+pool.query("SELECT 1")
+  .then(() => console.log("Connected to PostgreSQL database"))
+  .catch((err) => console.error("Failed to connect to PostgreSQL:", err.message));
 
 pool.on("error", (err) => {
   console.error("Unexpected error on idle PostgreSQL client", err);
