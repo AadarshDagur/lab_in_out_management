@@ -1,0 +1,147 @@
+<%- include('../partials/header') %>
+
+<style>
+  .qr-fullscreen {
+    background: #fff;
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+  .qr-fullscreen img {
+    max-width: 350px;
+    width: 100%;
+    border: 8px solid #000;
+    border-radius: 16px;
+    padding: 8px;
+    background: #fff;
+  }
+  .qr-lab-name {
+    font-size: 2rem;
+    font-weight: 700;
+  }
+  .qr-instruction {
+    font-size: 1.1rem;
+    color: #666;
+  }
+  .qr-countdown {
+    font-size: 0.95rem;
+    color: #888;
+  }
+  .occupancy-live {
+    font-size: 1.2rem;
+  }
+</style>
+
+<div class="qr-fullscreen">
+  <div class="mb-3">
+    <span class="badge bg-primary fs-5 px-3 py-2">
+      <i class="bi bi-qr-code me-1"></i> QR Check-In
+    </span>
+  </div>
+
+  <h1 class="qr-lab-name mb-1"><%= lab.name %></h1>
+  <p class="text-muted mb-0"><i class="bi bi-geo-alt me-1"></i><%= lab.location || '' %></p>
+  <% if (typeof purpose !== 'undefined' && purpose) { %>
+    <div class="mt-2">
+      <span class="badge bg-info fs-6 px-3 py-2">
+        <i class="bi bi-bookmark-fill me-1"></i><%= purpose %>
+      </span>
+    </div>
+  <% } %>
+
+  <div class="my-4">
+    <img id="qrImage" src="<%= qrDataUrl %>" alt="QR Code for <%= lab.name %>" />
+  </div>
+
+  <p class="qr-instruction">
+    <i class="bi bi-phone me-1"></i>
+    Open the <strong>Lab Manager</strong> app on your phone &rarr; tap <strong>"Scan QR"</strong> &rarr; point your camera here
+  </p>
+
+  <div class="occupancy-live my-3">
+    <span class="badge bg-<%= occupancy >= lab.capacity ? 'danger' : occupancy >= lab.capacity * 0.7 ? 'warning' : 'success' %> fs-6 px-3 py-2" id="occupancyBadge">
+      <i class="bi bi-people-fill me-1"></i>
+      <span id="occupancyCount"><%= occupancy %></span> / <%= lab.capacity %> seats occupied
+    </span>
+  </div>
+
+  <p class="qr-countdown">
+    <i class="bi bi-arrow-repeat me-1"></i>
+    QR auto-refreshes in <strong><span id="countdown">30</span>s</strong> for security
+  </p>
+
+  <div class="mt-4">
+    <a href="/labs/manage" class="btn btn-outline-secondary me-2">
+      <i class="bi bi-arrow-left me-1"></i>Back to Manage
+    </a>
+    <button class="btn btn-primary" id="refreshNow">
+      <i class="bi bi-arrow-clockwise me-1"></i>Refresh Now
+    </button>
+    <button class="btn btn-dark ms-2" id="fullscreenBtn">
+      <i class="bi bi-arrows-fullscreen me-1"></i>Fullscreen
+    </button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const labId = '<%= lab.id %>';
+  const capacity = <%= lab.capacity %>;
+  const purpose = '<%= typeof purpose !== "undefined" ? purpose.replace(/'/g, "\\\'" ) : "" %>';
+  let seconds = 30;
+  const countdownEl = document.getElementById('countdown');
+  const qrImage = document.getElementById('qrImage');
+  const occupancyCount = document.getElementById('occupancyCount');
+  const occupancyBadge = document.getElementById('occupancyBadge');
+  const refreshBtn = document.getElementById('refreshNow');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+  async function refreshQR() {
+    try {
+      const res = await fetch(`/qr/refresh/${labId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose })
+      });
+      const data = await res.json();
+      if (data.qrDataUrl) {
+        qrImage.src = data.qrDataUrl;
+      }
+      // Also refresh occupancy
+      const occRes = await fetch(`/api/lab-occupancy/${labId}`);
+      if (occRes.ok) {
+        const occData = await occRes.json();
+        occupancyCount.textContent = occData.occupancy;
+        const occ = occData.occupancy;
+        occupancyBadge.className = 'badge fs-6 px-3 py-2 bg-' +
+          (occ >= capacity ? 'danger' : occ >= capacity * 0.7 ? 'warning' : 'success');
+      }
+    } catch(e) {
+      console.error('QR refresh failed:', e);
+    }
+    seconds = 30;
+  }
+
+  // Countdown timer
+  setInterval(() => {
+    seconds--;
+    countdownEl.textContent = seconds;
+    if (seconds <= 0) {
+      refreshQR();
+    }
+  }, 1000);
+
+  refreshBtn.addEventListener('click', () => refreshQR());
+
+  // Fullscreen toggle
+  fullscreenBtn.addEventListener('click', () => {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen();
+    }
+  });
+})();
+</script>
+
+<%- include('../partials/footer') %>

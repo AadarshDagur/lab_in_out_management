@@ -1,0 +1,76 @@
+<%- include('../partials/header') %>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-dark text-white text-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-qr-code me-2"></i>Generate QR for Check-In
+                </h4>
+            </div>
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <span class="badge bg-primary fs-5 px-3 py-2">
+                        <i class="bi bi-building me-1"></i><%= lab.name %>
+                    </span>
+                    <% if (lab.location) { %>
+                        <p class="text-muted mt-2 mb-0">
+                            <i class="bi bi-geo-alt me-1"></i><%= lab.location %>
+                        </p>
+                    <% } %>
+                </div>
+
+                <form action="/qr/generate/<%= lab.id %>" method="POST">
+                    <div class="mb-3">
+                        <label for="purpose" class="form-label fw-bold">
+                            <i class="bi bi-pencil-square me-1"></i>Purpose / Session Name
+                        </label>
+                        <input type="text" class="form-control form-control-lg" id="purpose" name="purpose"
+                               placeholder="e.g. Data Structures Lab, Python Practice, Final Exam"
+                               required autofocus>
+                        <div class="form-text">
+                            This will be recorded as the check-in purpose for all students who scan this QR.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-lightbulb me-1"></i>Quick Select
+                        </label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm purpose-quick" data-purpose="Lab Practice">Lab Practice</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm purpose-quick" data-purpose="Assignment Work">Assignment Work</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm purpose-quick" data-purpose="Project Work">Project Work</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm purpose-quick" data-purpose="Exam / Test">Exam / Test</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm purpose-quick" data-purpose="Open Lab">Open Lab</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm purpose-quick" data-purpose="Workshop">Workshop</button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-dark w-100 btn-lg">
+                        <i class="bi bi-qr-code me-1"></i>Generate & Display QR Code
+                    </button>
+                </form>
+
+                <div class="text-center mt-3">
+                    <a href="/dashboard" class="text-muted">
+                        <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.purpose-quick').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.getElementById('purpose').value = btn.dataset.purpose;
+        // Highlight selected
+        document.querySelectorAll('.purpose-quick').forEach(b => b.classList.remove('btn-secondary', 'text-white'));
+        btn.classList.add('btn-secondary', 'text-white');
+    });
+});
+</script>
+
+<%- include('../partials/footer') %>

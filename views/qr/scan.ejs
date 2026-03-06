@@ -1,0 +1,148 @@
+<%- include('../partials/header') %>
+
+<style>
+  .scanner-container {
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  #reader {
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #reader video {
+    border-radius: 12px;
+  }
+  .scan-status {
+    min-height: 60px;
+  }
+</style>
+
+<div class="scanner-container text-center">
+  <h2 class="mb-3">
+    <i class="bi bi-qr-code-scan me-2"></i>Scan Lab QR Code
+  </h2>
+
+  <p class="text-muted mb-4">
+    Point your camera at the QR code displayed on the lab screen to check in instantly.
+  </p>
+
+  <!-- Camera scanner area -->
+  <div id="reader" class="mb-3 border rounded shadow-sm"></div>
+
+  <!-- Status messages -->
+  <div class="scan-status my-3">
+    <div id="scanMessage" class="alert d-none" role="alert"></div>
+    <div id="scanLoading" class="d-none">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Processing...</span>
+      </div>
+      <p class="mt-2 text-muted">Checking you in...</p>
+    </div>
+  </div>
+
+  <!-- Manual fallback -->
+  <div class="card mt-4">
+    <div class="card-body">
+      <h6><i class="bi bi-keyboard me-1"></i>Or enter code manually</h6>
+      <form id="manualForm" class="d-flex gap-2 mt-2">
+        <input type="text" class="form-control" id="manualCode" placeholder="Paste QR URL or code here...">
+        <button type="submit" class="btn btn-primary text-nowrap">
+          <i class="bi bi-check-lg"></i> Go
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <a href="/dashboard" class="btn btn-outline-secondary mt-4">
+    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+  </a>
+</div>
+
+<!-- html5-qrcode library (CDN) -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script>
+(function() {
+  const scanMessage = document.getElementById('scanMessage');
+  const scanLoading = document.getElementById('scanLoading');
+  let isProcessing = false;
+
+  function showMsg(msg, type) {
+    scanMessage.className = `alert alert-${type}`;
+    scanMessage.innerHTML = msg;
+    scanMessage.classList.remove('d-none');
+    scanLoading.classList.add('d-none');
+  }
+
+  function handleQRResult(decodedText) {
+    if (isProcessing) return;
+    isProcessing = true;
+
+    scanLoading.classList.remove('d-none');
+    scanMessage.classList.add('d-none');
+
+    // Extract the path from the URL
+    let url;
+    try {
+      url = new URL(decodedText);
+    } catch {
+      // If it's not a full URL, treat it as a token
+      url = { pathname: '/qr/checkin/' + decodedText };
+    }
+
+    // Navigate to the check-in URL
+    if (url.pathname && url.pathname.includes('/qr/checkin/')) {
+      window.location.href = url.pathname;
+    } else {
+      showMsg('<i class="bi bi-exclamation-triangle me-1"></i>Invalid QR code. Make sure you are scanning a Lab Manager QR code.', 'danger');
+      isProcessing = false;
+    }
+  }
+
+  // Start camera scanner
+  const html5QrCode = new Html5Qrcode("reader");
+
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+      // Prefer back camera on mobile
+      const backCam = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear'));
+      const cameraId = backCam ? backCam.id : cameras[0].id;
+
+      html5QrCode.start(
+        cameraId,
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0
+        },
+        (decodedText) => {
+          html5QrCode.stop().then(() => {
+            handleQRResult(decodedText);
+          }).catch(() => {
+            handleQRResult(decodedText);
+          });
+        },
+        (errorMessage) => { /* ignore scan errors */ }
+      ).catch(err => {
+        showMsg('<i class="bi bi-camera-video-off me-1"></i>Could not access camera. Please allow camera permission or use the manual entry below.', 'warning');
+      });
+    } else {
+      showMsg('<i class="bi bi-camera-video-off me-1"></i>No camera found. Use the manual entry below.', 'warning');
+    }
+  }).catch(err => {
+    showMsg('<i class="bi bi-camera-video-off me-1"></i>Could not access camera. Please allow camera permission or use the manual entry below.', 'warning');
+  });
+
+  // Manual entry form
+  document.getElementById('manualForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const code = document.getElementById('manualCode').value.trim();
+    if (code) {
+      handleQRResult(code);
+    }
+  });
+})();
+</script>
+
+<%- include('../partials/footer') %>
