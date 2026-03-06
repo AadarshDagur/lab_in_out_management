@@ -1,0 +1,104 @@
+/* ==============================
+   Lab In/Out Management System
+   Custom Styles
+   ============================== */
+
+/* General */
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f9fa;
+}
+
+main {
+  flex: 1;
+}
+
+/* Cards */
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Seat grid */
+.seat-cell {
+  width: 45px;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: default;
+}
+
+/* Stat cards */
+.card .display-6 {
+  font-size: 2rem;
+}
+
+/* Progress bars */
+.progress {
+  border-radius: 10px;
+}
+
+.progress-bar {
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* Navbar */
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.3rem;
+}
+
+/* Tables */
+.table th {
+  white-space: nowrap;
+}
+
+/* Alert auto-dismiss animation */
+.alert {
+  animation: fadeInDown 0.3s ease;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Login/Register cards */
+.card.shadow {
+  border: none;
+  border-radius: 12px;
+}
+
+/* Footer */
+footer {
+  margin-top: auto;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .display-4 {
+    font-size: 1.8rem;
+  }
+
+  .card .display-6 {
+    font-size: 1.5rem;
+  }
+}
