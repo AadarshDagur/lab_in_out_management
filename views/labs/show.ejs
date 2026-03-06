@@ -1,0 +1,143 @@
+<%- include('../partials/header') %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-building me-2"></i><%= lab.name %></h2>
+    <a href="/labs" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to Labs
+    </a>
+</div>
+
+<!-- Lab Info -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5>Lab Details</h5>
+                <p><i class="bi bi-geo-alt me-1"></i><strong>Location:</strong> <%= lab.location || 'N/A' %></p>
+                <p><i class="bi bi-people me-1"></i><strong>Capacity:</strong> <%= lab.capacity %></p>
+                <p><i class="bi bi-clock me-1"></i><strong>Hours:</strong> <%= lab.open_time %> - <%= lab.close_time %></p>
+                <p>
+                    <i class="bi bi-bar-chart me-1"></i><strong>Current Occupancy:</strong>
+                    <span class="badge bg-<%= occupancy >= lab.capacity ? 'danger' : occupancy >= lab.capacity * 0.7 ? 'warning' : 'success' %>">
+                        <%= occupancy %>/<%= lab.capacity %>
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <% if (!activeSession && occupancy < lab.capacity && currentUser) { %>
+            <% if (currentUser.role === 'student') { %>
+                <!-- Students must scan QR -->
+                <div class="card border-info">
+                    <div class="card-body text-center">
+                        <h5 class="text-info"><i class="bi bi-qr-code-scan me-2"></i>QR Check-In Required</h5>
+                        <p class="text-muted">To prevent fake check-ins, students must scan the QR code displayed on the lab screen.</p>
+                        <a href="/qr/scan" class="btn btn-info w-100">
+                            <i class="bi bi-qr-code-scan me-1"></i>Open QR Scanner
+                        </a>
+                    </div>
+                </div>
+            <% } else { %>
+                <!-- Admin/Assistant can do manual check-in -->
+                <div class="card border-success">
+                    <div class="card-body">
+                        <h5 class="text-success"><i class="bi bi-box-arrow-in-right me-2"></i>Manual Check In</h5>
+                        <form action="/sessions/checkin" method="POST">
+                            <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                            <div class="mb-3">
+                                <label for="seat_id" class="form-label">Select Seat (optional)</label>
+                                <select class="form-select" name="seat_id" id="seat_id">
+                                    <option value="">Auto-assign</option>
+                                    <% seats.forEach(seat => { %>
+                                        <% if (!seat.is_occupied) { %>
+                                            <option value="<%= seat.id %>"><%= seat.seat_number %></option>
+                                        <% } %>
+                                    <% }) %>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="purpose" class="form-label">Purpose</label>
+                                <input type="text" class="form-control" name="purpose" id="purpose"
+                                       placeholder="e.g. Assignment, Practice, Project">
+                            </div>
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>Check In Now
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            <% } %>
+        <% } %>
+        <% if ((currentUser.role === 'admin' || currentUser.role === 'assistant') && currentUser) { %>
+            <div class="card border-dark mt-3">
+                <div class="card-body text-center">
+                    <h5><i class="bi bi-qr-code me-2"></i>Lab QR Code</h5>
+                    <p class="text-muted mb-2">Display this QR on the lab screen for student check-ins</p>
+                    <a href="/qr/setup/<%= lab.id %>" class="btn btn-dark w-100">
+                        <i class="bi bi-qr-code me-1"></i>Show QR Code
+                    </a>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Seats Grid -->
+<h4 class="mb-3"><i class="bi bi-grid me-2"></i>Seat Map</h4>
+<div class="row mb-4">
+    <% seats.forEach(seat => { %>
+        <div class="col-2 col-md-1 mb-2">
+            <div class="text-center p-2 rounded <%= seat.is_occupied ? 'bg-danger text-white' : 'bg-success text-white' %>"
+                 title="<%= seat.is_occupied ? 'Occupied' : 'Available' %>"
+                 style="font-size: 0.8rem;">
+                <%= seat.seat_number %>
+            </div>
+        </div>
+    <% }) %>
+</div>
+<div class="mb-4">
+    <span class="badge bg-success me-2">Available</span>
+    <span class="badge bg-danger">Occupied</span>
+</div>
+
+<!-- Active Sessions in this Lab -->
+<h4 class="mb-3"><i class="bi bi-people me-2"></i>Current Students (<%= activeSessions.length %>)</h4>
+<% if (activeSessions.length === 0) { %>
+    <p class="text-muted">No students in this lab right now.</p>
+<% } else { %>
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>Name</th>
+                    <th>Enrollment</th>
+                    <th>Seat</th>
+                    <th>Check In</th>
+                    <% if (currentUser.role === 'assistant' || currentUser.role === 'admin') { %>
+                        <th>Action</th>
+                    <% } %>
+                </tr>
+            </thead>
+            <tbody>
+                <% activeSessions.forEach(s => { %>
+                    <tr>
+                        <td><%= s.user_name %></td>
+                        <td><%= s.enrollment_no %></td>
+                        <td><%= s.seat_number || '-' %></td>
+                        <td><%= new Date(s.check_in_time).toLocaleTimeString() %></td>
+                        <% if (currentUser.role === 'assistant' || currentUser.role === 'admin') { %>
+                            <td>
+                                <form action="/sessions/checkout/<%= s.id %>" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-danger btn-sm">Check Out</button>
+                                </form>
+                            </td>
+                        <% } %>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
+<% } %>
+
+<%- include('../partials/footer') %>
