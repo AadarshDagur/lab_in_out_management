@@ -45,18 +45,26 @@
                         </span>
                     </div>
 
-                    <% if (!activeSession && lab.available_seats > 0) { %>
-                        <a href="/qr/scan" class="btn btn-info btn-sm w-100 mt-2">
-                            <i class="bi bi-qr-code-scan me-1"></i>Scan QR to Check In
-                        </a>
-                    <% } else if (lab.available_seats <= 0) { %>
-                        <button class="btn btn-secondary btn-sm w-100 mt-2" disabled>Full</button>
+                    <% if (lab.available_seats <= 0) { %>
+                        <span class="badge bg-danger w-100 mt-2 py-2">Full</span>
                     <% } %>
                 </div>
             </div>
         </div>
     <% }) %>
 </div>
+
+<!-- QR Scan Button -->
+<% if (!activeSession) { %>
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <a href="/qr/scan" class="btn btn-info btn-lg">
+            <i class="bi bi-qr-code-scan me-2"></i>Scan QR Code to Check In
+        </a>
+        <p class="text-muted mt-2">Scan the QR code displayed on the lab screen to check in</p>
+    </div>
+</div>
+<% } %>
 
 <!-- Recent History -->
 <div class="row">
