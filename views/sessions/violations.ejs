@@ -1,0 +1,52 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <p class="section-kicker mb-2">My Record</p>
+    <h2 class="mb-0">My Violations</h2>
+</section>
+
+<section class="list-card p-4 mb-4">
+    <p class="section-kicker mb-1">Current Count</p>
+    <h3 class="mb-2"><%= student && typeof student.violation_count !== 'undefined' ? student.violation_count : violations.length %></h3>
+    <p class="muted-copy mb-0">This is your current violation count used for suspension checks.</p>
+</section>
+
+<section class="list-card p-4">
+    <% if (violations.length === 0) { %>
+        <div class="text-center py-5">
+            <div class="brand-mark mx-auto mb-3 text-success bg-success bg-opacity-10 border border-success border-opacity-25" style="width: 64px; height: 64px; font-size: 1.5rem;">
+                <i class="bi bi-check-circle-fill"></i>
+            </div>
+            <h4>All Clear!</h4>
+            <p class="muted-copy mb-0">You have no violation records.</p>
+        </div>
+    <% } else { %>
+        <div class="table-responsive">
+            <table class="table app-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Lab</th>
+                        <th>Note / Reason</th>
+                        <th>Marked By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% violations.forEach((violation) => { %>
+                        <tr>
+                            <td>
+                                <strong><%= new Date(violation.created_at).toLocaleDateString() %></strong><br>
+                                <span class="muted-copy"><%= new Date(violation.created_at).toLocaleTimeString() %></span>
+                            </td>
+                            <td><%= violation.lab_name || '-' %></td>
+                            <td><span class="soft-badge red"><%= violation.note || 'No reason provided' %></span></td>
+                            <td><%= violation.marked_by_name || 'System / Admin' %></td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } %>
+</section>
+
+<%- include('../partials/footer') %>

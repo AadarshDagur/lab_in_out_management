@@ -1,0 +1,154 @@
+<%- include('../partials/header') %>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <h3 class="text-center mb-4">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Login to Your Account
+        </h3>
+
+        <!-- Role Selection Tabs -->
+        <div class="d-flex justify-content-center mb-4">
+            <div class="btn-group role-selector" role="group">
+                <input type="radio" class="btn-check" name="roleTab" id="tabStudent" value="student" checked>
+                <label class="btn btn-outline-primary" for="tabStudent">
+                    <i class="bi bi-mortarboard me-1"></i>Student
+                </label>
+
+                <input type="radio" class="btn-check" name="roleTab" id="tabAssistant" value="assistant">
+                <label class="btn btn-outline-success" for="tabAssistant">
+                    <i class="bi bi-person-badge me-1"></i>Lab Assistant
+                </label>
+
+                <input type="radio" class="btn-check" name="roleTab" id="tabAdmin" value="admin">
+                <label class="btn btn-outline-danger" for="tabAdmin">
+                    <i class="bi bi-shield-lock me-1"></i>Admin
+                </label>
+            </div>
+        </div>
+
+        <!-- Role Info Cards -->
+        <div class="row justify-content-center mb-3">
+            <div class="col-md-8">
+                <div id="roleInfoStudent" class="role-info-card alert alert-primary py-2 text-center">
+                    <i class="bi bi-info-circle me-1"></i>Login with your student email and password to check in/out of labs.
+                </div>
+                <div id="roleInfoAssistant" class="role-info-card alert alert-success py-2 text-center d-none">
+                    <i class="bi bi-info-circle me-1"></i>Lab assistants can manage student check-ins and view lab activity.
+                </div>
+                <div id="roleInfoAdmin" class="role-info-card alert alert-danger py-2 text-center d-none">
+                    <i class="bi bi-info-circle me-1"></i>Admins can manage labs, assistants, and view all reports.
+                </div>
+            </div>
+        </div>
+
+        <!-- Login Form -->
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow" id="loginCard">
+                    <div class="card-body p-4">
+                        <div class="text-center mb-3">
+                            <span id="roleIcon" class="display-6 text-primary"><i class="bi bi-mortarboard"></i></span>
+                            <h5 id="roleLabel" class="mt-2">Student Login</h5>
+                        </div>
+
+                        <form action="/auth/login" method="POST">
+                            <input type="hidden" name="role" id="loginRole" value="student">
+                            <input type="hidden" name="redirect" value="<%= typeof redirectTo !== 'undefined' ? redirectTo : '' %>">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                    <input type="email" class="form-control" id="email" name="email"
+                                           placeholder="you@iitrpr.ac.in" required
+                                           pattern=".+@iitrpr\.ac\.in$" title="Email must end with @iitrpr.ac.in">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" class="form-control" id="password" name="password"
+                                           placeholder="Enter your password" required>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 mb-3" id="loginBtn">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>Login as Student
+                            </button>
+                        </form>
+
+                        <p class="text-center mb-0">
+                            <a href="/auth/forgot-password">Forgot your password?</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('input[name="roleTab"]');
+    const roleIcon = document.getElementById('roleIcon');
+    const roleLabel = document.getElementById('roleLabel');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginCard = document.getElementById('loginCard');
+    const infoCards = document.querySelectorAll('.role-info-card');
+
+    const config = {
+        student: {
+            icon: '<i class="bi bi-mortarboard"></i>',
+            label: 'Student Login',
+            btnText: 'Login as Student',
+            btnClass: 'btn-primary',
+            borderClass: 'border-primary',
+            iconColor: 'text-primary',
+            infoId: 'roleInfoStudent'
+        },
+        assistant: {
+            icon: '<i class="bi bi-person-badge"></i>',
+            label: 'Lab Assistant Login',
+            btnText: 'Login as Lab Assistant',
+            btnClass: 'btn-success',
+            borderClass: 'border-success',
+            iconColor: 'text-success',
+            infoId: 'roleInfoAssistant'
+        },
+        admin: {
+            icon: '<i class="bi bi-shield-lock"></i>',
+            label: 'Admin Login',
+            btnText: 'Login as Admin',
+            btnClass: 'btn-danger',
+            borderClass: 'border-danger',
+            iconColor: 'text-danger',
+            infoId: 'roleInfoAdmin'
+        }
+    };
+
+    tabs.forEach(tab => {
+        tab.addEventListener('change', () => {
+            const role = tab.value;
+            const c = config[role];
+
+            roleIcon.className = 'display-6 ' + c.iconColor;
+            roleIcon.innerHTML = c.icon;
+            roleLabel.textContent = c.label;
+
+            loginBtn.className = 'btn w-100 mb-3 ' + c.btnClass;
+            loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i>' + c.btnText;
+
+            loginCard.className = 'card shadow ' + c.borderClass;
+
+            infoCards.forEach(card => card.classList.add('d-none'));
+            document.getElementById(c.infoId).classList.remove('d-none');
+
+            // Update hidden role field
+            document.getElementById('loginRole').value = role;
+        });
+    });
+});
+</script>
+
+<%- include('../partials/footer') %>

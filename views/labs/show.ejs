@@ -1,0 +1,663 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+            <p class="section-kicker mb-2">Lab Record</p>
+            <h2 class="mb-2"><%= lab.name %></h2>
+            <span class="soft-badge <%= lab.is_active ? 'teal' : 'ink' %>"><%= lab.is_active ? 'Active' : 'Inactive' %></span>
+        </div>
+        <div class="d-flex flex-column align-items-start align-items-lg-end gap-2">
+            <div class="info-strip">
+                <span class="info-chip">Active <strong><%= occupancy %></strong></span>
+                <span class="info-chip">Free Seats <strong><%= Math.max(lab.capacity - occupancy, 0) %></strong></span>
+            </div>
+            <% if (currentUser && (currentUser.role === 'assistant' || currentUser.role === 'admin')) { %>
+                <form action="/labs/<%= lab.id %>/status" method="POST">
+                    <input type="hidden" name="is_active" value="<%= lab.is_active ? 'false' : 'true' %>">
+                    <button
+                        type="submit"
+                        class="btn btn-<%= lab.is_active ? 'warning' : 'success' %>"
+                        onclick="return confirm('<%= lab.is_active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?' %>')"
+                    >
+                        <%= lab.is_active ? 'Mark Lab Inactive' : 'Reactivate Lab' %>
+                    </button>
+                </form>
+            <% } %>
+        </div>
+    </div>
+</section>
+
+<% if (!lab.is_active) { %>
+<section class="list-card p-4 mb-4 border border-warning border-opacity-25">
+    <p class="section-kicker mb-1">Lab Status</p>
+    <h3 class="mb-2">This lab is inactive</h3>
+    <p class="muted-copy mb-0">New check-ins are disabled until the lab is reactivated.</p>
+</section>
+<% } %>
+
+<!-- Seat Map Modal -->
+<div class="seat-map-overlay" id="seatMapOverlay">
+    <div class="seat-map-modal">
+        <div class="seat-map-modal-header">
+            <div>
+                <p class="section-kicker mb-1">Seats</p>
+                <h3 class="mb-0">Seat Map &mdash; <%= lab.name %></h3>
+            </div>
+            <button class="seat-map-modal-close" id="seatMapCloseBtn" type="button" aria-label="Close">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="seat-map-modal-body">
+            <div class="seat-grid">
+                <% seats.forEach(seat => { %>
+                    <% const occupant = seatAssignments[seat.id]; %>
+                    <% if (occupant) { %>
+                        <% const minutes = Math.max(1, Math.round((Date.now() - new Date(occupant.check_in_time).getTime()) / 60000)); %>
+                        <div class="seat-tile busy interactive" role="button" tabindex="0" onclick="openOccupantDetails(this)"
+                            data-name="<%= occupant.user_name %>"
+                            data-image="<%= occupant.profile_image || '' %>"
+                            data-initials="<%= (occupant.user_name || 'U').trim().charAt(0).toUpperCase() %>"
+                            data-enrollment="<%= occupant.enrollment_no || '-' %>"
+                            data-purpose="<%= occupant.purpose || '-' %>"
+                            data-checkin="<%= new Date(occupant.check_in_time).toLocaleTimeString() %>"
+                            data-duration="<%= minutes %> min"
+                            data-userid="<%= occupant.user_id %>"
+                            data-seat="<%= seat.seat_number %>">
+                            <div><%= seat.seat_number %></div>
+                            <div class="seat-occupant">
+                                <div class="user-avatar-preview user-avatar-preview-xs">
+                                    <% if (occupant.profile_image) { %>
+                                        <img src="<%= occupant.profile_image %>" alt="<%= occupant.user_name %>">
+                                    <% } else { %>
+                                        <span><%= (occupant.user_name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                    <% } %>
+                                </div>
+                                <small><%= occupant.user_name %></small>
+                            </div>
+                        </div>
+                    <% } else { %>
+                        <div class="seat-tile free">
+                            <div><%= seat.seat_number %></div>
+                            <small>Free</small>
+                        </div>
+                    <% } %>
+                <% }) %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Occupant Details Modal -->
+<div class="seat-map-overlay" id="occupantDetailsOverlay" style="z-index: 2010;">
+    <div class="seat-map-modal" style="max-width: 400px;">
+        <div class="seat-map-modal-header">
+            <div>
+                <p class="section-kicker mb-1">Occupant Info</p>
+                <h3 class="mb-0">Seat <span id="occupantSeatNumber"></span></h3>
+            </div>
+            <button class="seat-map-modal-close" id="occupantDetailsCloseBtn" type="button" aria-label="Close">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="seat-map-modal-body text-center">
+            <div class="user-avatar-preview user-avatar-preview-lg mx-auto mb-3" id="occupantAvatar">
+                <!-- Image or initials injected here -->
+            </div>
+            <h4 class="mb-1" id="occupantName">Name</h4>
+            <p class="muted-copy mb-3" id="occupantEnrollment">Enrollment</p>
+            
+            <div class="list-card p-3 text-start mb-4">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <small class="muted-copy d-block">Check In</small>
+                        <strong id="occupantCheckIn">Time</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="muted-copy d-block">Duration</small>
+                        <strong id="occupantDuration">Min</strong>
+                    </div>
+                    <% if (currentUser && currentUser.role === 'assistant') { %>
+                    <div class="col-12">
+                        <small class="muted-copy d-block">Purpose</small>
+                        <strong id="occupantPurpose">Purpose</strong>
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <% if (currentUser && currentUser.role === 'assistant') { %>
+                <form action="/sessions/mark-violation" method="POST" id="occupantCheckoutForm">
+                    <input type="hidden" name="case_type" value="false_entry">
+                    <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                    <input type="hidden" name="user_id" id="occupantUserId" value="">
+                    <button type="submit" class="btn btn-danger w-100 py-2">Check Out Student</button>
+                </form>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<section class="mb-4">
+    <div class="seat-map-card" id="openSeatMapBtn" role="button" tabindex="0">
+        <div class="seat-map-card-icon">
+            <i class="bi bi-grid-3x3-gap-fill"></i>
+        </div>
+        <div class="seat-map-card-body">
+            <p class="section-kicker mb-1">Seats</p>
+            <h4 class="mb-1">Seat Map</h4>
+            <div class="seat-map-card-stats">
+                <span class="soft-badge teal"><%= Math.max(lab.capacity - occupancy, 0) %> Free</span>
+                <span class="soft-badge red"><%= occupancy %> Occupied</span>
+            </div>
+        </div>
+        <i class="bi bi-arrow-up-right seat-map-card-arrow"></i>
+    </div>
+</section>
+
+<section class="mb-4">
+    <div>
+        <% if (currentUser && !activeSession && currentUser.role === 'student' && lab.is_active) { %>
+            <div class="list-card p-4 mb-4">
+                <p class="section-kicker mb-1">Check-In</p>
+                <h3 class="mb-3">Select a seat</h3>
+                <form action="/sessions/checkin" method="POST" class="row g-3">
+                    <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                    <div class="col-md-6">
+                        <label class="form-label">Seat</label>
+                        <select class="form-select" name="seat_id">
+                            <option value="">Auto assign</option>
+                            <% seats.forEach(seat => { if (!seat.is_occupied) { %>
+                                <option value="<%= seat.id %>"><%= seat.seat_number %></option>
+                            <% } }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Purpose</label>
+                        <input type="text" class="form-control" name="purpose" placeholder="Class, practice, assignment">
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Check In</button>
+                    </div>
+                </form>
+            </div>
+        <% } else if (currentUser && activeSession && currentUser.role === 'student') { %>
+            <div class="list-card p-4 mb-4">
+                <p class="section-kicker mb-1">Active Session</p>
+                <h3 class="mb-2"><%= activeSession.lab_name %></h3>
+                <p class="muted-copy mb-0">Check out from your current session before entering another lab.</p>
+            </div>
+        <% } %>
+        <% if (currentUser && currentUser.role === 'assistant' && lab.is_active) { %>
+            <div class="list-card p-4 mb-4">
+                <p class="section-kicker mb-1">Mark Missing Entry</p>
+                <h3 class="mb-3">Mark Missing Entry</h3>
+                <form action="/sessions/mark-violation" method="POST" class="row g-3 seat-aware-form" id="markMissingEntryForm">
+                    <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                    <input type="hidden" name="case_type" value="missing_entry">
+                    <div class="col-12">
+                        <label class="form-label">Search Student</label>
+                        <input type="text" class="form-control missing-entry-search" id="missingEntrySearchInput" placeholder="Type to search students by name, email, enrollment, or department">
+                    </div>
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+                            <label class="form-label mb-0">Student</label>
+                            <small class="muted-copy" id="missingEntryStudentCount">
+                                Start typing to search
+                            </small>
+                        </div>
+                        <div class="table-responsive missing-entry-table-wrap">
+                            <table class="table app-table missing-entry-table mb-0" id="missingEntryStudentTable">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Student</th>
+                                        <th>Department</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="missing-entry-empty">
+                                        <td colspan="4">Start typing to search students</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <input type="hidden" name="user_id" id="missingEntryUserId" value="" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Seat</label>
+                        <select class="form-select seat-select" name="seat_id">
+                            <option value="">Auto assign</option>
+                            <% seats.forEach(seat => { if (!seat.is_occupied) { %>
+                                <option value="<%= seat.id %>"><%= seat.seat_number %></option>
+                            <% } }) %>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Purpose</label>
+                        <input type="text" class="form-control" name="purpose" placeholder="Class, practice, assignment">
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">Check In Student</button>
+                    </div>
+                </form>
+
+            <!-- Inject student data for assistant check-in -->
+            <% if (typeof students !== 'undefined') { %>
+            <script id="labStudentStatusData" type="application/json">
+                <%- JSON.stringify(students).replace(/</g, '\\u003c') %>
+            </script>
+            <% } %>
+            <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const students = (() => {
+                    const node = document.getElementById('labStudentStatusData');
+                    if (!node) return [];
+                    try { return JSON.parse(node.textContent || '[]'); } catch { return []; }
+                })();
+                const searchInput = document.getElementById('missingEntrySearchInput');
+                const tableBody = document.querySelector('#missingEntryStudentTable tbody');
+                const studentCount = document.getElementById('missingEntryStudentCount');
+                const userIdInput = document.getElementById('missingEntryUserId');
+                let selectedRow = null;
+                let selectedStudentId = '';
+
+                function getInitials(name) {
+                    return (name || 'U')
+                        .trim()
+                        .split(/\s+/)
+                        .slice(0, 2)
+                        .map(part => part.charAt(0).toUpperCase())
+                        .join('') || 'U';
+                }
+
+                function rankStudents(items, term) {
+                    if (!term) {
+                        return [...items].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                    }
+
+                    return items
+                        .map(student => {
+                            const fields = [
+                                student.name,
+                                student.email,
+                                student.enrollment_no,
+                                student.department
+                            ]
+                                .filter(Boolean)
+                                .map(value => value.toLowerCase());
+
+                            const indexes = fields
+                                .map(value => value.indexOf(term))
+                                .filter(index => index >= 0);
+
+                            const bestIndex = indexes.length ? Math.min(...indexes) : Number.MAX_SAFE_INTEGER;
+                            const startsWith = fields.some(value => value.startsWith(term));
+
+                            return { student, bestIndex, startsWith };
+                        })
+                        .sort((a, b) => {
+                            if (a.startsWith !== b.startsWith) return a.startsWith ? -1 : 1;
+                            if (a.bestIndex !== b.bestIndex) return a.bestIndex - b.bestIndex;
+                            return (a.student.name || '').localeCompare(b.student.name || '');
+                        })
+                        .map(item => item.student);
+                }
+
+                function selectRow(tr, studentId) {
+                    if (selectedRow && selectedRow === tr) {
+                        // Clicking the same row again deselects it and shows all results
+                        tr.classList.remove('table-primary');
+                        selectedRow = null;
+                        selectedStudentId = '';
+                        userIdInput.value = '';
+                        // Show all rows again
+                        Array.from(tableBody.querySelectorAll('tr')).forEach(row => {
+                            row.style.display = '';
+                        });
+                        renderTable(searchInput.value);
+                        return;
+                    }
+                    if (selectedRow) selectedRow.classList.remove('table-primary');
+                    tr.classList.add('table-primary');
+                    selectedRow = tr;
+                    selectedStudentId = String(studentId);
+                    userIdInput.value = studentId;
+
+                    // Hide all other rows, show only the selected one
+                    Array.from(tableBody.querySelectorAll('tr')).forEach(row => {
+                        if (row !== tr) {
+                            row.style.display = 'none';
+                        }
+                    });
+                    if (studentCount) {
+                        studentCount.textContent = 'Selected';
+                    }
+                }
+
+                function renderTable(filter = '') {
+                    const val = filter.trim().toLowerCase();
+                    tableBody.innerHTML = '';
+                    if (!val) {
+                        if (studentCount) {
+                            studentCount.textContent = 'Start typing to search';
+                        }
+                        const tr = document.createElement('tr');
+                        tr.className = 'missing-entry-empty';
+                        const td = document.createElement('td');
+                        td.colSpan = 4;
+                        td.textContent = 'Start typing to search students';
+                        tr.appendChild(td);
+                        tableBody.appendChild(tr);
+                        userIdInput.value = '';
+                        selectedStudentId = '';
+                        selectedRow = null;
+                        return;
+                    }
+                    let filtered = students.filter(s =>
+                        [s.name, s.email, s.enrollment_no, s.department]
+                            .filter(Boolean)
+                            .some(f => f.toLowerCase().includes(val))
+                    );
+                    filtered = rankStudents(filtered, val);
+                    if (studentCount) {
+                        studentCount.textContent = filtered.length === 0
+                            ? 'No students found'
+                            : `${filtered.length} match${filtered.length === 1 ? '' : 'es'}`;
+                    }
+                    if (filtered.length === 0) {
+                        const tr = document.createElement('tr');
+                        tr.className = 'missing-entry-empty';
+                        const td = document.createElement('td');
+                        td.colSpan = 4;
+                        td.textContent = 'No matching students';
+                        tr.appendChild(td);
+                        tableBody.appendChild(tr);
+                        userIdInput.value = '';
+                        selectedStudentId = '';
+                        selectedRow = null;
+                        return;
+                    }
+                    filtered.forEach((student, index) => {
+                        const tr = document.createElement('tr');
+                        tr.tabIndex = 0;
+                        tr.dataset.studentId = student.id;
+                        const indexCell = document.createElement('td');
+                        indexCell.textContent = index + 1;
+
+                        const studentCell = document.createElement('td');
+                        const studentWrap = document.createElement('div');
+                        studentWrap.className = 'user-inline';
+
+                        const avatar = document.createElement('div');
+                        avatar.className = 'user-avatar-preview user-avatar-preview-sm';
+                        if (student.profile_image) {
+                            const img = document.createElement('img');
+                            img.src = student.profile_image;
+                            img.alt = student.name;
+                            avatar.appendChild(img);
+                        } else {
+                            const span = document.createElement('span');
+                            span.textContent = getInitials(student.name);
+                            avatar.appendChild(span);
+                        }
+
+                        const meta = document.createElement('div');
+                        const name = document.createElement('strong');
+                        name.textContent = student.name;
+                        const enrollment = document.createElement('span');
+                        enrollment.className = 'muted-copy';
+                        enrollment.textContent = student.enrollment_no || '-';
+                        const email = document.createElement('span');
+                        email.className = 'muted-copy';
+                        email.textContent = student.email;
+
+                        meta.appendChild(name);
+                        meta.appendChild(document.createElement('br'));
+                        meta.appendChild(enrollment);
+                        meta.appendChild(document.createElement('br'));
+                        meta.appendChild(email);
+                        studentWrap.appendChild(avatar);
+                        studentWrap.appendChild(meta);
+                        studentCell.appendChild(studentWrap);
+
+                        const departmentCell = document.createElement('td');
+                        departmentCell.textContent = student.department || '-';
+
+                        const statusCell = document.createElement('td');
+                        const statusBadge = document.createElement('span');
+                        statusBadge.className = 'soft-badge teal';
+                        statusBadge.textContent = 'available';
+                        statusCell.appendChild(statusBadge);
+
+                        tr.appendChild(indexCell);
+                        tr.appendChild(studentCell);
+                        tr.appendChild(departmentCell);
+                        tr.appendChild(statusCell);
+                        tr.addEventListener('click', () => {
+                            selectRow(tr, student.id);
+                        });
+                        tr.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                tr.click();
+                            }
+                        });
+                        tableBody.appendChild(tr);
+                    });
+                    const selectedStudentStillVisible = filtered.some(student => String(student.id) === selectedStudentId);
+                    if (!selectedStudentStillVisible) {
+                        userIdInput.value = '';
+                        selectedStudentId = '';
+                        selectedRow = null;
+                    }
+                }
+                searchInput.addEventListener('input', () => renderTable(searchInput.value));
+                renderTable();
+            });
+            </script>
+            </div>
+        <div class="list-card p-4">
+            <p class="section-kicker mb-1">Active Students</p>
+            <h3 class="mb-3">Current entries</h3>
+            <% if (activeSessions.length === 0) { %>
+                <p class="muted-copy mb-0">No active sessions in this lab.</p>
+            <% } else { %>
+                <div class="table-responsive">
+                    <table class="table app-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Seat</th>
+                                <th>Check In</th>
+                                <th>Duration</th>
+                                <% if (currentUser.role === 'assistant') { %>
+                                    <th></th>
+                                <% } %>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% activeSessions.forEach(session => { %>
+                                <% const minutes = Math.max(1, Math.round((Date.now() - new Date(session.check_in_time).getTime()) / 60000)); %>
+                                <tr>
+                                    <td>
+                                        <div class="user-inline">
+                                            <div class="user-avatar-preview user-avatar-preview-sm">
+                                                <% if (session.profile_image) { %>
+                                                    <img src="<%= session.profile_image %>" alt="<%= session.user_name %>">
+                                                <% } else { %>
+                                                    <span><%= (session.user_name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                                <% } %>
+                                            </div>
+                                            <div>
+                                                <strong><%= session.user_name %></strong><br>
+                                                <span class="muted-copy"><%= session.enrollment_no %></span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="soft-badge orange"><%= session.seat_number || 'Unassigned' %></span></td>
+                                    <td><%= new Date(session.check_in_time).toLocaleTimeString() %></td>
+                                    <td><span class="soft-badge ink duration-pill"><%= minutes %> min</span></td>
+                                    <% if (currentUser.role === 'assistant') { %>
+                                        <td>
+                                            <form action="/sessions/mark-violation" method="POST">
+                                                <input type="hidden" name="case_type" value="false_entry">
+                                                <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                                                <input type="hidden" name="user_id" value="<%= session.user_id %>">
+                                                <button type="submit" class="btn btn-danger btn-sm">Check Out</button>
+                                            </form>
+                                        </td>
+                                    <% } %>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<% if (currentUser && currentUser.role === 'assistant') { %>
+<section class="list-card p-4">
+    <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+        <div>
+            <p class="section-kicker mb-1">Recent History</p>
+            <h3 class="mb-0">Latest sessions in <%= lab.name %></h3>
+        </div>
+        <% if (currentUser && currentUser.role === 'assistant') { %>
+            <a href="/sessions/lab/<%= lab.id %>" class="btn btn-outline-dark btn-sm">View Full History</a>
+        <% } %>
+    </div>
+    <% if (recentHistory.length === 0) { %>
+        <p class="muted-copy mb-0">No sessions recorded for this lab.</p>
+    <% } else { %>
+        <div class="table-responsive">
+            <table class="table app-table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Seat</th>
+                        <th>Purpose</th>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% recentHistory.forEach(session => { %>
+                        <tr>
+                            <td>
+                                <div class="user-inline">
+                                    <div class="user-avatar-preview user-avatar-preview-sm">
+                                        <% if (session.profile_image) { %>
+                                            <img src="<%= session.profile_image %>" alt="<%= session.user_name %>">
+                                        <% } else { %>
+                                            <span><%= (session.user_name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                        <% } %>
+                                    </div>
+                                    <div>
+                                        <strong><%= session.user_name %></strong><br>
+                                        <span class="muted-copy"><%= session.enrollment_no || '-' %></span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><%= session.seat_number || '-' %></td>
+                            <td><%= session.purpose || '-' %></td>
+                            <td><%= new Date(session.check_in_time).toLocaleString() %></td>
+                            <td><%= session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-' %></td>
+                            <td><span class="soft-badge <%= session.status === 'active' ? 'teal' : 'ink' %>"><%= session.status %></span></td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } %>
+</section>
+<% } %>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var openBtn = document.getElementById('openSeatMapBtn');
+    var closeBtn = document.getElementById('seatMapCloseBtn');
+    var overlay = document.getElementById('seatMapOverlay');
+    if (openBtn && closeBtn && overlay) {
+        function openModal() {
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeModal() {
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        openBtn.addEventListener('click', openModal);
+        openBtn.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(); }
+        });
+        closeBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('occupantDetailsOverlay').classList.contains('active')) {
+                    closeOccupantModal();
+                } else if (overlay.classList.contains('active')) {
+                    closeModal();
+                }
+            }
+        });
+    }
+
+    // Occupant Details Modal Logic
+    var occupantOverlay = document.getElementById('occupantDetailsOverlay');
+    var occupantCloseBtn = document.getElementById('occupantDetailsCloseBtn');
+    
+    function closeOccupantModal() {
+        occupantOverlay.classList.remove('active');
+    }
+    
+    if (occupantCloseBtn && occupantOverlay) {
+        occupantCloseBtn.addEventListener('click', closeOccupantModal);
+        occupantOverlay.addEventListener('click', function(e) {
+            if (e.target === occupantOverlay) closeOccupantModal();
+        });
+    }
+
+    window.openOccupantDetails = function(element) {
+        var name = element.getAttribute('data-name');
+        var image = element.getAttribute('data-image');
+        var initials = element.getAttribute('data-initials');
+        var enrollment = element.getAttribute('data-enrollment');
+        var purpose = element.getAttribute('data-purpose');
+        var checkin = element.getAttribute('data-checkin');
+        var duration = element.getAttribute('data-duration');
+        var userId = element.getAttribute('data-userid');
+        var seat = element.getAttribute('data-seat');
+
+        document.getElementById('occupantSeatNumber').textContent = seat;
+        document.getElementById('occupantName').textContent = name;
+        document.getElementById('occupantEnrollment').textContent = enrollment || '-';
+        var occupantPurposeEl = document.getElementById('occupantPurpose');
+        if (occupantPurposeEl) occupantPurposeEl.textContent = purpose || 'Unspecified';
+        
+        document.getElementById('occupantCheckIn').textContent = checkin;
+        document.getElementById('occupantDuration').textContent = duration;
+        
+        var avatarContainer = document.getElementById('occupantAvatar');
+        if (image) {
+            avatarContainer.innerHTML = '<img src="' + image + '" alt="' + name + '">';
+        } else {
+            avatarContainer.innerHTML = '<span>' + initials + '</span>';
+        }
+
+        var userIdInput = document.getElementById('occupantUserId');
+        if (userIdInput) userIdInput.value = userId;
+
+        occupantOverlay.classList.add('active');
+    };
+});
+</script>
+<%- include('../partials/footer') %>

@@ -1,0 +1,65 @@
+<%- include('../partials/header') %>
+
+<h2 class="mb-4"><i class="bi bi-clock-history me-2"></i>My Lab History</h2>
+
+<% if (sessions.length === 0) { %>
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>You haven't visited any lab yet.
+        <a href="/labs">Browse labs</a> to check in.
+    </div>
+<% } else { %>
+    <div class="mb-3">
+        <input type="text" id="historySearchInput" class="form-control" placeholder="Type to search history...">
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover" id="historyTable">
+            <thead class="table-dark">
+                <tr>
+                    <th>#</th>
+                    <th>Lab</th>
+                    <th>Seat</th>
+                    <th>Purpose</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% sessions.forEach((s, i) => { %>
+                    <tr class="history-row" data-filter-text="<%= [s.lab_name, s.seat_number || '-', s.purpose || '-', s.status].join(' ').toLowerCase() %>">
+                        <td><%= i + 1 %></td>
+                        <td><%= s.lab_name %></td>
+                        <td><%= s.seat_number || '-' %></td>
+                        <td><%= s.purpose || '-' %></td>
+                        <td><%= new Date(s.check_in_time).toLocaleString() %></td>
+                        <td><%= s.check_out_time ? new Date(s.check_out_time).toLocaleString() : '-' %></td>
+                        <td><%= s.duration_minutes ? Math.round(s.duration_minutes) + ' min' : '-' %></td>
+                        <td>
+                            <span class="badge bg-<%= s.status === 'active' ? 'success' : s.status === 'completed' ? 'secondary' : 'warning' %>">
+                                <%= s.status %>
+                            </span>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
+<% } %>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('historySearchInput');
+    const rows = document.querySelectorAll('#historyTable .history-row');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const val = searchInput.value.trim().toLowerCase();
+            rows.forEach(row => {
+                const text = row.dataset.filterText || '';
+                row.style.display = text.includes(val) ? '' : 'none';
+            });
+        });
+    }
+});
+</script>
+<%- include('../partials/footer') %>

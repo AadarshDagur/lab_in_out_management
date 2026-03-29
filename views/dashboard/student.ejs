@@ -1,0 +1,115 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="row align-items-center g-4">
+        <div class="col-lg-8">
+            <p class="section-kicker mb-2">Student Panel</p>
+            <h2 class="mb-3">Dashboard</h2>
+            <div class="info-strip">
+                <span class="info-chip">Enrollment <strong><%= currentUser.enrollment_no || 'N/A' %></strong></span>
+                <span class="info-chip">Violations <strong><%= student.violation_count || 0 %></strong></span>
+                <% if (activeSession) { %>
+                    <span class="info-chip">Active Lab <strong><%= activeSession.lab_name %></strong></span>
+                <% } %>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass-panel">
+                <% if (activeSession) { %>
+                    <p class="section-kicker mb-2">Active Session</p>
+                    <h4><%= activeSession.lab_name %></h4>
+                    <p class="muted-copy mb-2">Seat <strong><%= activeSession.seat_number || 'Unassigned' %></strong></p>
+                    <p class="muted-copy mb-3">Checked in at <%= new Date(activeSession.check_in_time).toLocaleTimeString() %></p>
+                    <form action="/sessions/checkout/<%= activeSession.id %>" method="POST">
+                        <button type="submit" class="btn btn-danger w-100">Check Out</button>
+                    </form>
+                <% } else { %>
+                    <p class="section-kicker mb-2">No Active Session</p>
+                    <a href="/labs" class="btn btn-primary w-100">Open Labs</a>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</section>
+
+<% if (activeSection === 'labs') { %>
+<section class="list-card p-4">
+    <div class="filter-group filter-toolbar mb-3">
+        <input type="text" class="form-control" placeholder="Search lab" data-filter-key="text">
+        <select class="form-select" data-filter-key="availability">
+            <option value="">All</option>
+            <option value="available">Available</option>
+            <option value="full">Full</option>
+        </select>
+    </div>
+    <div class="row g-4 filter-targets">
+        <% labs.forEach(lab => { %>
+            <% const pct = lab.capacity > 0 ? Math.round((lab.current_occupancy / lab.capacity) * 100) : 0; %>
+            <div class="col-md-6 col-xl-4 filter-item" data-filter-text="<%= `${lab.name} ${lab.location || ''}`.toLowerCase() %>" data-filter-availability="<%= lab.available_seats > 0 ? 'available' : 'full' %>">
+                <div class="lab-card">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h4 class="mb-1"><%= lab.name %></h4>
+                            <p class="lab-meta mb-0"><%= lab.location || 'Location not set' %></p>
+                        </div>
+                        <span class="soft-badge <%= lab.available_seats > 0 ? 'teal' : 'red' %>">
+                            <%= lab.available_seats %> seats free
+                        </span>
+                    </div>
+                    <div class="occupancy-meter mb-2">
+                        <div class="occupancy-fill" style="width: <%= pct %>%"></div>
+                    </div>
+                    <p class="muted-copy mb-3"><%= lab.current_occupancy %> of <%= lab.capacity %> seats occupied</p>
+                    <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark w-100">Open Lab</a>
+                </div>
+            </div>
+        <% }) %>
+    </div>
+</section>
+<% } %>
+
+<% if (activeSection === 'history') { %>
+<section class="list-card p-4">
+    <% if (recentHistory.length === 0) { %>
+        <p class="muted-copy mb-0">No sessions recorded yet.</p>
+    <% } else { %>
+        <div class="filter-group filter-toolbar mb-3">
+            <input type="text" class="form-control" placeholder="Search lab or seat" data-filter-key="text">
+            <select class="form-select" data-filter-key="status">
+                <option value="">All status</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="auto_closed">Auto Closed</option>
+            </select>
+        </div>
+        <div class="table-responsive">
+            <table class="table app-table">
+                <thead>
+                    <tr>
+                        <th>Lab</th>
+                        <th>Seat</th>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody class="filter-targets">
+                    <% recentHistory.forEach(session => { %>
+                        <tr class="filter-item" data-filter-text="<%= `${session.lab_name} ${session.seat_number || ''}`.toLowerCase() %>" data-filter-status="<%= session.status %>">
+                            <td><%= session.lab_name %></td>
+                            <td><%= session.seat_number || 'Unassigned' %></td>
+                            <td><%= new Date(session.check_in_time).toLocaleString() %></td>
+                            <td><%= session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-' %></td>
+                            <td><%= session.duration_minutes ? Math.round(session.duration_minutes) + ' min' : '-' %></td>
+                            <td><span class="soft-badge <%= session.status === 'active' ? 'teal' : 'ink' %>"><%= session.status %></span></td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } %>
+</section>
+<% } %>
+
+<%- include('../partials/footer') %>

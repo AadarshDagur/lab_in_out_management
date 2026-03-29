@@ -1,0 +1,95 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Lab Timeline</p>
+            <h2 class="mb-1"><%= lab.name %> History</h2>
+            <p class="muted-copy mb-0">Review past sessions recorded in this lab.</p>
+        </div>
+        <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back to Lab
+        </a>
+    </div>
+</section>
+
+<section class="mb-4">
+    <div>
+        <div class="list-card p-4">
+            <p class="section-kicker mb-1">Session Records</p>
+            <h3 class="mb-3">History for <%= lab.name %></h3>
+            <% if (sessions.length === 0) { %>
+                <p class="muted-copy mb-0">No sessions recorded for this lab.</p>
+            <% } else { %>
+                <div class="filter-group filter-toolbar mb-3">
+                    <input type="text" id="labHistorySearchInput" class="form-control" placeholder="Search student, seat, purpose, or status">
+                </div>
+                <div class="table-responsive">
+                    <table class="table app-table" id="labHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Student</th>
+                                <th>Seat</th>
+                                <th>Purpose</th>
+                                <th>Check In</th>
+                                <th>Check Out</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% sessions.forEach((s, i) => { %>
+                                <tr class="lab-history-row" data-filter-text="<%= [s.user_name, s.enrollment_no || '-', s.seat_number || '-', s.purpose || '-', s.status].join(' ').toLowerCase() %>">
+                                    <td><%= i + 1 %></td>
+                                    <td>
+                                        <div class="user-inline">
+                                            <div class="user-avatar-preview user-avatar-preview-sm">
+                                                <% if (s.profile_image) { %>
+                                                    <img src="<%= s.profile_image %>" alt="<%= s.user_name %>">
+                                                <% } else { %>
+                                                    <span><%= (s.user_name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                                <% } %>
+                                            </div>
+                                            <div>
+                                                <strong><%= s.user_name %></strong><br>
+                                                <span class="muted-copy"><%= s.enrollment_no || '-' %></span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><%= s.seat_number || '-' %></td>
+                                    <td><%= s.purpose || '-' %></td>
+                                    <td><%= new Date(s.check_in_time).toLocaleString() %></td>
+                                    <td><%= s.check_out_time ? new Date(s.check_out_time).toLocaleString() : '-' %></td>
+                                    <td><%= s.duration_minutes ? Math.round(s.duration_minutes) + ' min' : '-' %></td>
+                                    <td>
+                                        <span class="soft-badge <%= s.status === 'active' ? 'teal' : 'ink' %>">
+                                            <%= s.status %>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('labHistorySearchInput');
+    const rows = document.querySelectorAll('#labHistoryTable .lab-history-row');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const val = searchInput.value.trim().toLowerCase();
+            rows.forEach(row => {
+                const text = row.dataset.filterText || '';
+                row.style.display = text.includes(val) ? '' : 'none';
+            });
+        });
+    }
+});
+</script>
+<%- include('../partials/footer') %>

@@ -1,0 +1,91 @@
+<% if (typeof currentUser !== 'undefined' && currentUser) { %>
+<aside class="app-sidebar">
+    <a class="navbar-brand sidebar-brand" href="/">
+        <span class="brand-mark"><i class="bi bi-building"></i></span>
+        <span>Lab Administration</span>
+    </a>
+
+    <div class="sidebar-user">
+        <div class="sidebar-user-head">
+            <div class="user-avatar-preview">
+                <% if (currentUser.profile_image) { %>
+                    <img src="<%= currentUser.profile_image %>" alt="<%= currentUser.name %>">
+                <% } else { %>
+                    <span><%= (currentUser.name || 'U').trim().charAt(0).toUpperCase() %></span>
+                <% } %>
+            </div>
+            <div class="d-flex flex-column">
+                <strong><%= currentUser.name %></strong>
+                <span><%= currentUser.email %></span>
+            </div>
+        </div>
+        <span class="role-pill"><%= currentUser.role %></span>
+    </div>
+
+    <nav class="sidebar-nav">
+        <% if (currentUser.role !== 'admin') { %>
+        <a class="nav-link <%= currentPath === '/dashboard' ? 'active' : '' %>" href="/dashboard">
+            <i class="bi bi-grid-1x2-fill"></i>
+            <span>Dashboard</span>
+        </a>
+        <div class="sidebar-subnav">
+            <% if (currentUser.role === 'student') { %>
+                <a class="subnav-link <%= currentPath === '/dashboard' && activeSection === 'labs' ? 'active' : '' %>" href="/dashboard?section=labs">Lab Availability</a>
+                <a class="subnav-link <%= currentPath === '/dashboard' && activeSection === 'history' ? 'active' : '' %>" href="/dashboard?section=history">Recent Sessions</a>
+            <% } %>
+            <% if (currentUser.role === 'assistant') { %>
+                <a class="subnav-link <%= currentPath === '/dashboard' && activeSection === 'live' ? 'active' : '' %>" href="/dashboard?section=live">Live Sessions</a>
+                <a class="subnav-link <%= currentPath === '/dashboard' && activeSection === 'violations' ? 'active' : '' %>" href="/dashboard?section=violations">Recent Violations</a>
+                <a class="subnav-link <%= currentPath === '/dashboard' && activeSection === 'directory' ? 'active' : '' %>" href="/dashboard?section=directory">Directory</a>
+            <% } %>
+        </div>
+        <% } %>
+        <% if (currentUser.role !== 'admin') { %>
+            <a class="nav-link <%= currentPath === '/labs' || currentPath.startsWith('/labs/') ? 'active' : '' %>" href="/labs">
+                <i class="bi bi-door-open-fill"></i>
+                <span>Labs</span>
+            </a>
+        <% } %>
+        <% if (currentUser.role === 'student') { %>
+            <a class="nav-link <%= currentPath === '/sessions/history' ? 'active' : '' %>" href="/sessions/history">
+                <i class="bi bi-clock-history"></i>
+                <span>My Visits</span>
+            </a>
+            <a class="nav-link <%= currentPath === '/sessions/violations' ? 'active' : '' %>" href="/sessions/violations">
+                <i class="bi bi-shield-exclamation"></i>
+                <span>My Violations</span>
+            </a>
+        <% } %>
+        <% if (currentUser.role === 'admin') { %>
+            <a class="nav-link <%= currentPath === '/labs/manage' ? 'active' : '' %>" href="/labs/manage">
+                <i class="bi bi-sliders"></i>
+                <span>Manage Labs</span>
+            </a>
+            <a class="nav-link <%= currentPath === '/users' || currentPath.startsWith('/users/') ? 'active' : '' %>" href="/users">
+                <i class="bi bi-people-fill"></i>
+                <span>Manage Users</span>
+            </a>
+            <a class="nav-link <%= currentPath === '/admin/settings' ? 'active' : '' %>" href="/admin/settings">
+                <i class="bi bi-gear-fill"></i>
+                <span>Settings</span>
+            </a>
+        <% } %>
+    </nav>
+
+    <form action="/auth/logout" method="POST" class="mt-auto">
+        <button type="submit" class="btn btn-outline-light w-100 nav-logout">Logout</button>
+    </form>
+</aside>
+<% } else { %>
+<nav class="navbar navbar-expand-lg app-navbar">
+    <div class="container">
+        <a class="navbar-brand" href="/">
+            <span class="brand-mark"><i class="bi bi-building"></i></span>
+            <span>Lab Administration</span>
+        </a>
+        <div class="ms-auto">
+            <a class="btn btn-outline-light btn-sm nav-logout" href="/auth/login">Login</a>
+        </div>
+    </div>
+</nav>
+<% } %>
