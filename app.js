@@ -20,10 +20,11 @@ const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
 
 // Vercel/other reverse proxies terminate TLS before forwarding requests to Express.
-// Trusting the proxy lets secure session cookies work correctly in production.
-app.set("trust proxy", 1);
+// Trusting forwarded headers keeps secure cookies and req.protocol accurate on Vercel.
+app.set("trust proxy", isProduction ? true : 1);
 
 async function ensureUserProfileImageColumn() {
   try {
@@ -185,14 +186,15 @@ app.use(
       tableName: "session",
       createTableIfMissing: true,
     }),
-    proxy: process.env.NODE_ENV === "production",
+    proxy: isProduction,
     secret: process.env.SESSION_SECRET || "lab-management-secret-key",
     resave: false,
     saveUninitialized: false,
     cookie: {
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      secure: isProduction ? "auto" : false,
     },
   })
 );

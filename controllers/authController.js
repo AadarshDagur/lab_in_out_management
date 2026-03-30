@@ -66,7 +66,15 @@ const authController = {
 
       req.flash("success", `Welcome back, ${user.name}!`);
       const redirectTo = req.body.redirect || authController.getDefaultRedirectForUser(user);
-      return res.redirect(redirectTo);
+      return req.session.save((saveError) => {
+        if (saveError) {
+          console.error("Session save error:", saveError);
+          req.flash("error", "Something went wrong. Please try again.");
+          return res.redirect("/auth/login");
+        }
+
+        return res.redirect(redirectTo);
+      });
     } catch (err) {
       console.error("Login error:", err);
       req.flash("error", "Something went wrong. Please try again.");
