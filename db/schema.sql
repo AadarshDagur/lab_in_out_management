@@ -8,6 +8,9 @@
 -- Drop tables if they exist (for fresh setup)
 DROP TABLE IF EXISTS lab_sessions CASCADE;
 DROP TABLE IF EXISTS seats CASCADE;
+DROP TABLE IF EXISTS violation_logs CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
+DROP TABLE IF EXISTS system_settings CASCADE;
 DROP TABLE IF EXISTS labs CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS session CASCADE;
@@ -27,6 +30,7 @@ CREATE TABLE users (
     profile_image TEXT,
     violation_count INT NOT NULL DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
+    suspended_until TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -76,7 +80,18 @@ CREATE TABLE lab_sessions (
 );
 
 -- ============================================
--- 5. Express Session Store Table
+-- 5. System Settings
+-- ============================================
+CREATE TABLE system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value VARCHAR(255) NOT NULL
+);
+
+INSERT INTO system_settings (key, value)
+VALUES ('violation_limit', '3');
+
+-- ============================================
+-- 6. Express Session Store Table
 -- ============================================
 CREATE TABLE session (
     sid VARCHAR NOT NULL COLLATE "default",
@@ -88,7 +103,7 @@ CREATE TABLE session (
 CREATE INDEX idx_session_expire ON session (expire);
 
 -- ============================================
--- 6. Password Reset Tokens
+-- 7. Password Reset Tokens
 -- ============================================
 CREATE TABLE password_reset_tokens (
     id SERIAL PRIMARY KEY,
@@ -103,7 +118,7 @@ CREATE INDEX idx_prt_token ON password_reset_tokens(token_hash);
 CREATE INDEX idx_prt_user ON password_reset_tokens(user_id);
 
 -- ============================================
--- 7. Violation Logs
+-- 8. Violation Logs
 -- ============================================
 CREATE TABLE violation_logs (
     id SERIAL PRIMARY KEY,
@@ -131,12 +146,13 @@ CREATE INDEX idx_seats_lab ON seats(lab_id);
 -- Seed: Default Admin User
 -- Password: admin123 (bcrypt hash)
 -- ============================================
-INSERT INTO users (name, email, password_hash, role, enrollment_no, department)
+INSERT INTO users (name, email, password_hash, role, enrollment_no, department, phone)
 VALUES (
     'Admin',
     'admin@iitrpr.ac.in',
     '$2b$10$3u94Rz59m99zEl2TUQCyceev3zDJrKSiV1ymFOesWqU8pRhAhW0u.',
     'admin',
     'ADMIN001',
-    'Computer Science'
+    'Computer Science',
+    '0000000000'
 );

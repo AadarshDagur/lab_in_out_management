@@ -1,19 +1,6 @@
 const User = require("../models/userModel");
 const { validationResult } = require("express-validator");
-const fs = require("fs");
-const path = require("path");
-
-function getUploadedProfileImagePath(file) {
-  return file ? `/uploads/users/${file.filename}` : null;
-}
-
-function deleteStoredProfileImage(profileImage) {
-  if (!profileImage || !profileImage.startsWith("/uploads/users/")) return;
-  const imagePath = path.join(__dirname, "..", "public", profileImage.replace(/^\/+/, ""));
-  if (fs.existsSync(imagePath)) {
-    fs.unlinkSync(imagePath);
-  }
-}
+const { saveProfileImage, deleteProfileImage } = require("../services/storageService");
 
 const userController = {
   // GET /users - List all users
@@ -38,6 +25,7 @@ const userController = {
 
   // POST /users - Create a new user (admin can create any role)
   async create(req, res) {
+    let profileImage = null;
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -46,7 +34,7 @@ const userController = {
       }
 
       const { name, email, password, role, enrollment_no, department, phone } = req.body;
-      const profile_image = getUploadedProfileImagePath(req.file);
+      profileImage = await saveProfileImage(req.file);
 
       // Ensure enrollment/staff ID is provided
       if (!enrollment_no || !enrollment_no.trim()) {
@@ -84,15 +72,15 @@ const userController = {
         enrollment_no,
         department,
         phone,
-        profile_image,
+        profile_image: profileImage,
       });
 
       req.flash("success", `${role.charAt(0).toUpperCase() + role.slice(1)} "${name}" created successfully`);
       res.redirect("/users");
     } catch (err) {
       console.error("Error creating user:", err);
-      if (req.file) {
-        deleteStoredProfileImage(getUploadedProfileImagePath(req.file));
+      if (profileImage) {
+        await deleteProfileImage(profileImage);
       }
       req.flash("error", "Failed to create user");
       res.redirect("/users");
@@ -101,6 +89,7 @@ const userController = {
 
   // PUT /users/:id - Update user
   async update(req, res) {
+    let uploadedProfileImage = null;
     try {
       const { name, email, department, phone, is_active, remove_profile_image } = req.body;
       const existingUser = await User.findById(req.params.id);
@@ -118,7 +107,7 @@ const userController = {
         }
       }
 
-      const uploadedProfileImage = getUploadedProfileImagePath(req.file);
+      uploadedProfileImage = await saveProfileImage(req.file);
       const updatedUser = await User.update(req.params.id, {
         name,
         email,
@@ -130,11 +119,11 @@ const userController = {
       });
 
       if (uploadedProfileImage && existingUser?.profile_image && existingUser.profile_image !== uploadedProfileImage) {
-        deleteStoredProfileImage(existingUser.profile_image);
+        await deleteProfileImage(existingUser.profile_image);
       }
 
       if (remove_profile_image === "true" && existingUser?.profile_image) {
-        deleteStoredProfileImage(existingUser.profile_image);
+        await deleteProfileImage(existingUser.profile_image);
       }
 
       if (parseInt(req.params.id, 10) === req.session.user.id && updatedUser) {
@@ -150,8 +139,8 @@ const userController = {
       res.redirect("/users");
     } catch (err) {
       console.error("Error updating user:", err);
-      if (req.file) {
-        deleteStoredProfileImage(getUploadedProfileImagePath(req.file));
+      if (uploadedProfileImage) {
+        await deleteProfileImage(uploadedProfileImage);
       }
       req.flash("error", "Failed to update user");
       res.redirect("/users");
@@ -254,6 +243,7 @@ const userController = {
         }
       }
 
+      await deleteProfileImage(targetUser.profile_image);
       await User.delete(req.params.id);
       req.flash("success", "User deleted successfully");
       res.redirect("/users");
