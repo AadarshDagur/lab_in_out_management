@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -7,14 +8,18 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
-// Test connection once on startup
-pool.query("SELECT 1")
-  .then(() => console.log("Connected to PostgreSQL database"))
-  .catch((err) => console.error("Failed to connect to PostgreSQL:", err.message));
+// Avoid extra startup DB work on serverless cold starts.
+if (!isProduction) {
+  pool.query("SELECT 1")
+    .then(() => console.log("Connected to PostgreSQL database"))
+    .catch((err) => console.error("Failed to connect to PostgreSQL:", err.message));
+}
 
 pool.on("error", (err) => {
   console.error("Unexpected error on idle PostgreSQL client", err);
-  process.exit(-1);
+  if (!isProduction) {
+    process.exit(-1);
+  }
 });
 
 module.exports = {

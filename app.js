@@ -21,6 +21,9 @@ const adminRoutes = require("./routes/adminRoutes");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+const shouldRunRuntimeDbSetup =
+  process.env.RUN_RUNTIME_DB_SETUP === "true" ||
+  (!isProduction && process.env.RUN_RUNTIME_DB_SETUP !== "false");
 
 // Vercel/other reverse proxies terminate TLS before forwarding requests to Express.
 // Trusting forwarded headers keeps secure cookies and req.protocol accurate on Vercel.
@@ -304,6 +307,10 @@ app.use((err, req, res, next) => {
 let bootstrapPromise = null;
 
 function ensureAppReady() {
+  if (!shouldRunRuntimeDbSetup) {
+    return Promise.resolve();
+  }
+
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
       await ensureUserProfileImageColumn();
