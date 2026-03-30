@@ -21,6 +21,10 @@ const adminRoutes = require("./routes/adminRoutes");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Vercel/other reverse proxies terminate TLS before forwarding requests to Express.
+// Trusting the proxy lets secure session cookies work correctly in production.
+app.set("trust proxy", 1);
+
 async function ensureUserProfileImageColumn() {
   try {
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT");
@@ -181,6 +185,7 @@ app.use(
       tableName: "session",
       createTableIfMissing: true,
     }),
+    proxy: process.env.NODE_ENV === "production",
     secret: process.env.SESSION_SECRET || "lab-management-secret-key",
     resave: false,
     saveUninitialized: false,
