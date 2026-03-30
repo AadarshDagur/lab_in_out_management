@@ -345,9 +345,12 @@ async function startServer() {
 
 if (require.main === module) {
   startServer();
-}
+} else {
+  module.exports = async (req, res) => {
+    await ensureAppReady();
+    return app(req, res);
+  };
 
-module.exports = {
-  app,
-  ensureAppReady,
-};
+  module.exports.app = app;
+  module.exports.ensureAppReady = ensureAppReady;
+}
