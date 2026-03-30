@@ -86,6 +86,7 @@ const authController = {
   logout(req, res) {
     req.session.destroy((err) => {
       if (err) console.error("Logout error:", err);
+      res.clearCookie("connect.sid");
       res.redirect("/auth/login");
     });
   },
