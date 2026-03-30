@@ -202,6 +202,27 @@ app.use(
 // Flash messages
 app.use(flash());
 
+// Persist session-backed flash/user changes before redirecting on serverless runtimes.
+app.use((req, res, next) => {
+  const originalRedirect = res.redirect.bind(res);
+
+  res.redirect = (...args) => {
+    if (!req.session || res.headersSent) {
+      return originalRedirect(...args);
+    }
+
+    return req.session.save((error) => {
+      if (error) {
+        console.error("Session save before redirect failed:", error);
+      }
+
+      return originalRedirect(...args);
+    });
+  };
+
+  next();
+});
+
 // Set locals (user data + flash messages available in all views)
 app.use(setLocals);
 
