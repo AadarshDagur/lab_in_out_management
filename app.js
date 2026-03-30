@@ -271,15 +271,30 @@ app.use((err, req, res, next) => {
 });
 
 // =========================
-// Start Server
+// Start Server / Bootstrap
 // =========================
+let bootstrapPromise = null;
+
+function ensureAppReady() {
+  if (!bootstrapPromise) {
+    bootstrapPromise = (async () => {
+      await ensureUserProfileImageColumn();
+      await ensureSystemSettingsTable();
+      await ensurePasswordResetTable();
+      await ensureDatabaseCleanup();
+      await ensureViolationTerminology();
+    })().catch((error) => {
+      bootstrapPromise = null;
+      throw error;
+    });
+  }
+
+  return bootstrapPromise;
+}
+
 async function startServer() {
   try {
-    await ensureUserProfileImageColumn();
-    await ensureSystemSettingsTable();
-    await ensurePasswordResetTable();
-    await ensureDatabaseCleanup();
-    await ensureViolationTerminology();
+    await ensureAppReady();
   } finally {
     app.listen(PORT, () => {
       console.log(`
@@ -293,6 +308,11 @@ async function startServer() {
   }
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
-module.exports = app;
+module.exports = {
+  app,
+  ensureAppReady,
+};
