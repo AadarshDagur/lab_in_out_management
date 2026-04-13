@@ -59,8 +59,7 @@ const Lab = {
   async findAllWithOccupancy() {
     const result = await db.query(`
       SELECT l.*,
-        COALESCE(s.active_count, 0) AS current_occupancy,
-        GREATEST(l.capacity - COALESCE(s.active_count, 0), 0) AS available_seats
+        COALESCE(s.active_count, 0) AS current_occupancy
       FROM labs l
       LEFT JOIN (
         SELECT lab_id, COUNT(*) AS active_count
@@ -71,38 +70,6 @@ const Lab = {
       WHERE l.is_active = TRUE
       ORDER BY l.name ASC
     `);
-    return result.rows;
-  },
-
-  async getSeats(labId) {
-    const result = await db.query(
-      `SELECT s.*,
-        CASE WHEN ls.id IS NOT NULL THEN TRUE ELSE FALSE END AS is_occupied,
-        ls.user_id AS occupied_by
-      FROM seats s
-      LEFT JOIN lab_sessions ls ON s.id = ls.seat_id AND ls.status = 'active'
-      WHERE s.lab_id = $1 AND s.is_active = TRUE
-      ORDER BY s.seat_number ASC`,
-      [labId]
-    );
-    return result.rows;
-  },
-
-  async createSeats(labId, count) {
-    const values = [];
-    const params = [];
-
-    for (let i = 1; i <= count; i += 1) {
-      values.push(`($${params.length + 1}, $${params.length + 2})`);
-      params.push(labId, `S${String(i).padStart(2, "0")}`);
-    }
-
-    const result = await db.query(
-      `INSERT INTO seats (lab_id, seat_number)
-       VALUES ${values.join(", ")}
-       RETURNING *`,
-      params
-    );
     return result.rows;
   },
 };

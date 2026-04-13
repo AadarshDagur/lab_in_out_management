@@ -51,7 +51,7 @@ const dashboardController = {
   async assistantDashboard(req, res) {
     const activeSection = dashboardController.pickSection(
       req.query.section,
-      ["live", "violations", "directory"],
+      ["live", "violations", "directory", "statistics"],
       "live"
     );
 
@@ -59,7 +59,14 @@ const dashboardController = {
     const activeSessions = await LabSession.getAllActiveSessions();
     const stats = await LabSession.getTodayStats();
     const students = await User.findStudentDirectory();
-    const recentViolations = await Entry.getRecentViolations();
+    const recentViolations = await Entry.getViolationsByAssistant(req.session.user.id);
+    
+    let globalStats = null;
+    let labStats = [];
+    if (activeSection === "statistics") {
+      globalStats = await LabSession.getGlobalStatistics(30);
+      labStats = await LabSession.getLabStatistics(30);
+    }
 
     res.render("dashboard/assistant", {
       title: "Assistant Dashboard",
@@ -69,6 +76,8 @@ const dashboardController = {
       students,
       recentViolations,
       activeSection,
+      globalStats,
+      labStats,
     });
   },
 

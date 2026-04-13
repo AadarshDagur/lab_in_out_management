@@ -7,7 +7,6 @@
 
 -- Drop tables if they exist (for fresh setup)
 DROP TABLE IF EXISTS lab_sessions CASCADE;
-DROP TABLE IF EXISTS seats CASCADE;
 DROP TABLE IF EXISTS violation_logs CASCADE;
 DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS system_settings CASCADE;
@@ -51,25 +50,12 @@ CREATE TABLE labs (
 );
 
 -- ============================================
--- 3. Seats Table
--- ============================================
-CREATE TABLE seats (
-    id SERIAL PRIMARY KEY,
-    lab_id INT NOT NULL REFERENCES labs(id) ON DELETE CASCADE,
-    seat_number VARCHAR(10) NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    UNIQUE(lab_id, seat_number)
-);
-
--- ============================================
--- 4. Lab Sessions (Check-in / Check-out)
+-- 3. Lab Sessions Table
 -- ============================================
 CREATE TABLE lab_sessions (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     lab_id INT NOT NULL REFERENCES labs(id) ON DELETE CASCADE,
-    seat_id INT REFERENCES seats(id) ON DELETE SET NULL,
-    purpose VARCHAR(255),
     check_in_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     check_out_time TIMESTAMP,
     duration_minutes INT,
@@ -140,7 +126,6 @@ CREATE INDEX idx_lab_sessions_status ON lab_sessions(status);
 CREATE INDEX idx_lab_sessions_checkin ON lab_sessions(check_in_time);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_enrollment ON users(enrollment_no);
-CREATE INDEX idx_seats_lab ON seats(lab_id);
 
 -- ============================================
 -- Seed: Default Admin User

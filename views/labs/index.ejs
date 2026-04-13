@@ -14,7 +14,6 @@
         </div>
     <% } %>
     <% labs.forEach(lab => { %>
-        <% const pct = lab.capacity > 0 ? Math.round((lab.current_occupancy / lab.capacity) * 100) : 0; %>
         <div class="col-md-6 col-xl-4">
             <div class="lab-card">
                 <div class="d-flex justify-content-between align-items-start mb-3">
@@ -22,13 +21,26 @@
                         <h3 class="h4 mb-1"><%= lab.name %></h3>
                         <p class="lab-meta mb-0"><%= lab.location || 'Location not set' %></p>
                     </div>
-                    <span class="soft-badge <%= lab.available_seats > 0 ? 'teal' : 'red' %>"><%= lab.available_seats %> free</span>
+                    <span class="soft-badge <%= Number(lab.current_occupancy) > Number(lab.capacity) ? 'red' : 'teal' %>">
+                        <%= lab.current_occupancy %> / <%= lab.capacity %>
+                    </span>
                 </div>
-                <div class="occupancy-meter mb-2">
-                    <div class="occupancy-fill" style="width: <%= pct %>%"></div>
-                </div>
-                <p class="muted-copy mb-3"><%= lab.current_occupancy %> of <%= lab.capacity %> occupied</p>
-                <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark w-100">Open Lab</a>
+                <% if (currentUser && currentUser.role === 'student' && !activeSession) { %>
+                    <form action="/sessions/checkin" method="POST" class="mb-2">
+                        <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                        <button type="submit" class="btn btn-success w-100 btn-lg">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>Check In
+                        </button>
+                    </form>
+                <% } else if (currentUser && currentUser.role === 'student' && activeSession && Number(activeSession.lab_id) === Number(lab.id)) { %>
+                    <form action="/sessions/checkout/<%= activeSession.id %>" method="POST" class="mb-2">
+                        <button type="submit" class="btn btn-danger w-100 btn-lg">
+                            <i class="bi bi-box-arrow-right me-2"></i>Check Out
+                        </button>
+                    </form>
+                <% } else { %>
+                    <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark w-100">Open Lab</a>
+                <% } %>
             </div>
         </div>
     <% }) %>

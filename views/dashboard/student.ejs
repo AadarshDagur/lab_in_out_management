@@ -18,14 +18,15 @@
                 <% if (activeSession) { %>
                     <p class="section-kicker mb-2">Active Session</p>
                     <h4><%= activeSession.lab_name %></h4>
-                    <p class="muted-copy mb-2">Seat <strong><%= activeSession.seat_number || 'Unassigned' %></strong></p>
                     <p class="muted-copy mb-3">Checked in at <%= new Date(activeSession.check_in_time).toLocaleTimeString() %></p>
                     <form action="/sessions/checkout/<%= activeSession.id %>" method="POST">
-                        <button type="submit" class="btn btn-danger w-100">Check Out</button>
+                        <button type="submit" class="btn btn-danger w-100 btn-lg">
+                            <i class="bi bi-box-arrow-right me-2"></i>Check Out
+                        </button>
                     </form>
                 <% } else { %>
                     <p class="section-kicker mb-2">No Active Session</p>
-                    <a href="/labs" class="btn btn-primary w-100">Open Labs</a>
+                    <p class="muted-copy mb-2">Pick a lab below to check in instantly.</p>
                 <% } %>
             </div>
         </div>
@@ -36,31 +37,36 @@
 <section class="list-card p-4">
     <div class="filter-group filter-toolbar mb-3">
         <input type="text" class="form-control" placeholder="Search lab" data-filter-key="text">
-        <select class="form-select" data-filter-key="availability">
-            <option value="">All</option>
-            <option value="available">Available</option>
-            <option value="full">Full</option>
-        </select>
     </div>
     <div class="row g-4 filter-targets">
         <% labs.forEach(lab => { %>
-            <% const pct = lab.capacity > 0 ? Math.round((lab.current_occupancy / lab.capacity) * 100) : 0; %>
-            <div class="col-md-6 col-xl-4 filter-item" data-filter-text="<%= `${lab.name} ${lab.location || ''}`.toLowerCase() %>" data-filter-availability="<%= lab.available_seats > 0 ? 'available' : 'full' %>">
+            <div class="col-md-6 col-xl-4 filter-item" data-filter-text="<%= `${lab.name} ${lab.location || ''}`.toLowerCase() %>">
                 <div class="lab-card">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
                             <h4 class="mb-1"><%= lab.name %></h4>
                             <p class="lab-meta mb-0"><%= lab.location || 'Location not set' %></p>
                         </div>
-                        <span class="soft-badge <%= lab.available_seats > 0 ? 'teal' : 'red' %>">
-                            <%= lab.available_seats %> seats free
+                        <span class="soft-badge <%= Number(lab.current_occupancy) > Number(lab.capacity) ? 'red' : 'teal' %>">
+                            <%= lab.current_occupancy %> / <%= lab.capacity %>
                         </span>
                     </div>
-                    <div class="occupancy-meter mb-2">
-                        <div class="occupancy-fill" style="width: <%= pct %>%"></div>
-                    </div>
-                    <p class="muted-copy mb-3"><%= lab.current_occupancy %> of <%= lab.capacity %> seats occupied</p>
-                    <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark w-100">Open Lab</a>
+                    <% if (!activeSession) { %>
+                        <form action="/sessions/checkin" method="POST">
+                            <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                            <button type="submit" class="btn btn-success w-100 btn-lg">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Check In
+                            </button>
+                        </form>
+                    <% } else if (activeSession && Number(activeSession.lab_id) === Number(lab.id)) { %>
+                        <form action="/sessions/checkout/<%= activeSession.id %>" method="POST">
+                            <button type="submit" class="btn btn-danger w-100 btn-lg">
+                                <i class="bi bi-box-arrow-right me-2"></i>Check Out
+                            </button>
+                        </form>
+                    <% } else { %>
+                        <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark w-100">View Lab</a>
+                    <% } %>
                 </div>
             </div>
         <% }) %>
@@ -74,7 +80,7 @@
         <p class="muted-copy mb-0">No sessions recorded yet.</p>
     <% } else { %>
         <div class="filter-group filter-toolbar mb-3">
-            <input type="text" class="form-control" placeholder="Search lab or seat" data-filter-key="text">
+            <input type="text" class="form-control" placeholder="Search lab" data-filter-key="text">
             <select class="form-select" data-filter-key="status">
                 <option value="">All status</option>
                 <option value="active">Active</option>
@@ -87,7 +93,6 @@
                 <thead>
                     <tr>
                         <th>Lab</th>
-                        <th>Seat</th>
                         <th>Check In</th>
                         <th>Check Out</th>
                         <th>Duration</th>
@@ -96,9 +101,8 @@
                 </thead>
                 <tbody class="filter-targets">
                     <% recentHistory.forEach(session => { %>
-                        <tr class="filter-item" data-filter-text="<%= `${session.lab_name} ${session.seat_number || ''}`.toLowerCase() %>" data-filter-status="<%= session.status %>">
+                        <tr class="filter-item" data-filter-text="<%= `${session.lab_name}`.toLowerCase() %>" data-filter-status="<%= session.status %>">
                             <td><%= session.lab_name %></td>
-                            <td><%= session.seat_number || 'Unassigned' %></td>
                             <td><%= new Date(session.check_in_time).toLocaleString() %></td>
                             <td><%= session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-' %></td>
                             <td><%= session.duration_minutes ? Math.round(session.duration_minutes) + ' min' : '-' %></td>

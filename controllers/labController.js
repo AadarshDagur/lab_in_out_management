@@ -19,7 +19,10 @@ const labController = {
   async index(req, res) {
     try {
       const labs = await Lab.findAllWithOccupancy();
-      res.render("labs/index", { title: "Labs", labs });
+      const activeSession = req.session.user
+        ? await LabSession.getActiveSession(req.session.user.id)
+        : null;
+      res.render("labs/index", { title: "Labs", labs, activeSession });
     } catch (err) {
       console.error("Error fetching labs:", err);
       req.flash("error", "Failed to fetch labs");
@@ -35,7 +38,6 @@ const labController = {
         return res.redirect("/labs");
       }
 
-      const seats = await Lab.getSeats(lab.id);
       const activeSessions = await LabSession.getActiveSessions(lab.id);
       const recentHistory = await LabSession.getLabHistory(lab.id, 10);
       const occupancy = await Lab.getOccupancy(lab.id);
@@ -47,28 +49,15 @@ const labController = {
         req.session.user &&
         (req.session.user.role === "assistant" || req.session.user.role === "admin")
       ) {
-        // Get all students
         const allStudents = await User.findStudentDirectory();
-        // Get all active sessions (across all labs)
         const allActiveSessions = await LabSession.getAllActiveSessions();
-        // Build a set of user_ids who are currently checked in (ensure type match)
         const checkedInUserIds = new Set(allActiveSessions.map(s => String(s.user_id)));
-        // Only include students who are NOT checked in anywhere (ensure type match)
         students = allStudents.filter(s => !checkedInUserIds.has(String(s.id)));
       }
-
-      const seatAssignments = activeSessions.reduce((acc, session) => {
-        if (session.seat_id) {
-          acc[session.seat_id] = session;
-        }
-        return acc;
-      }, {});
 
       res.render("labs/show", {
         title: lab.name,
         lab,
-        seats,
-        seatAssignments,
         activeSessions,
         recentHistory,
         occupancy,
@@ -104,7 +93,7 @@ const labController = {
       }
 
       const { name, location, capacity, open_time, close_time } = req.body;
-      const lab = await Lab.create({
+      await Lab.create({
         name,
         location,
         capacity: parseInt(capacity),
@@ -112,11 +101,9 @@ const labController = {
         close_time,
       });
 
-      if (capacity && parseInt(capacity) > 0) {
-        await Lab.createSeats(lab.id, parseInt(capacity));
-      }
+      // No seat creation — seats concept removed
 
-      req.flash("success", `Lab "${lab.name}" created successfully`);
+      req.flash("success", `Lab "${name}" created successfully`);
       res.redirect("/labs/manage");
     } catch (err) {
       console.error("Error creating lab:", err);

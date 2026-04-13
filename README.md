@@ -1,23 +1,23 @@
 # Lab In/Out Management System
 
-A lab access and presence management system for IIT Ropar with role-based workflows for students, lab assistants, and admins.
+A streamlined lab access and presence management system for IIT Ropar with role-based workflows for students, lab assistants, and admins. 
 
-Tech stack: Node.js, Express, EJS, PostgreSQL
+Tech stack: Node.js, Express, PostgreSQL, EJS, Bootstrap
 
 ## Features
 
-- Student self check-in and check-out
-- Assistant handling for missing-entry and false-entry cases
-- Violation tracking with automatic suspension based on system settings
-- Admin management for labs, users, and violation limits
-- Session history for students and lab history for assistants
-- Password reset through email
+- **Simplified Check-In/Out:** Students can easily check into and out of labs (no seat assignments or purpose tracking needed, maximizing speed).
+- **Assistant Management:** Lab assistants can manage active sessions, check out students who forgot, and monitor current lab occupancy.
+- **Violation Tracking:** Assistants can mark students for violations (e.g., missing entry, false entry) with automatic suspensions based on system limits.
+- **Admin Dashboard:** Admins can manage labs, users, system settings (like violation limits), and view platform-wide analytics.
+- **History & Reports:** Session history available for students, and detailed lab history/daily reports available for assistants.
+- **Password Reset:** Secure self-service password reset flow via email.
 
 ## Roles
 
-- Student: check in, check out, view own history, view own violations
-- Assistant: manage lab entries, mark violations, check out students, view lab history
-- Admin: manage labs, manage users, configure system settings
+- **Student:** Check in, check out, view active session, view personal session history, view own violations.
+- **Assistant:** View active lab occupancy, manage ongoing sessions, check out students, mark violations, view lab history.
+- **Admin:** Add/manage labs, oversee user accounts, configure system settings (violation limits, etc.), view analytical dashboards.
 
 ## Project Structure
 

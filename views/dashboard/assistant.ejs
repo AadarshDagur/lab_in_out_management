@@ -1,37 +1,19 @@
 <%- include('../partials/header') %>
 
+<% if (activeSection === 'live') { %>
 <section class="hero-panel mb-4">
-    <div class="row g-4 align-items-start">
-        <div class="col-lg-8">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
             <p class="section-kicker mb-2">Assistant Console</p>
-            <h2 class="mb-3">Dashboard</h2>
+            <h2 class="mb-0">Live Sessions</h2>
         </div>
-        <div class="col-lg-4">
-            <div class="row g-3">
-                <div class="col-12">
-                    <div class="stat-tile orange">
-                        <small>Currently Active</small>
-                        <h3><%= stats.currently_active || 0 %></h3>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="stat-tile teal">
-                        <small>Today Total</small>
-                        <h3><%= stats.today_total || 0 %></h3>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="stat-tile ink">
-                        <small>Avg Duration</small>
-                        <h3><%= stats.avg_duration || 0 %></h3>
-                    </div>
-                </div>
-            </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="info-chip">Active Now <strong><%= stats.currently_active || 0 %></strong></span>
+            <span class="info-chip">Today <strong><%= stats.today_total || 0 %></strong></span>
         </div>
     </div>
 </section>
 
-<% if (activeSection === 'live') { %>
 <section class="list-card p-4">
     <% if (activeSessions.length === 0) { %>
         <p class="muted-copy mb-0">No active sessions right now.</p>
@@ -51,7 +33,6 @@
                     <tr>
                         <th>Student</th>
                         <th>Lab</th>
-                        <th>Seat</th>
                         <th>Since</th>
                         <th>Duration</th>
                         <th></th>
@@ -66,11 +47,13 @@
                                 <span class="muted-copy"><%= session.enrollment_no %></span>
                             </td>
                             <td><%= session.lab_name %></td>
-                            <td><span class="soft-badge orange"><%= session.seat_number || 'Unassigned' %></span></td>
                             <td><%= new Date(session.check_in_time).toLocaleTimeString() %></td>
                             <td><span class="soft-badge ink duration-pill"><%= minutes %> min</span></td>
                             <td>
-                                <form action="/sessions/checkout/<%= session.id %>" method="POST">
+                                <form action="/sessions/mark-violation" method="POST">
+                                    <input type="hidden" name="case_type" value="false_entry">
+                                    <input type="hidden" name="lab_id" value="<%= session.lab_id %>">
+                                    <input type="hidden" name="user_id" value="<%= session.user_id %>">
                                     <button type="submit" class="btn btn-sm btn-danger">Check Out</button>
                                 </form>
                             </td>
@@ -84,6 +67,13 @@
 <% } %>
 
 <% if (activeSection === 'violations') { %>
+<section class="hero-panel mb-4">
+    <div>
+        <p class="section-kicker mb-2">Assistant Console</p>
+        <h2 class="mb-0">Recent Violations</h2>
+    </div>
+</section>
+
 <section class="list-card p-4">
     <% if (recentViolations.length === 0) { %>
         <p class="muted-copy mb-0">No violation cases yet.</p>
@@ -106,9 +96,12 @@
                             <div class="muted-copy"><%= item.lab_name %> | <%= item.enrollment_no %></div>
                             <% if (item.note) { %><div class="muted-copy"><%= item.note %></div><% } %>
                         </div>
-                        <div class="text-end">
+                        <div class="text-end d-flex flex-column align-items-end gap-2">
                             <div class="soft-badge red">Count: <%= item.violation_count %></div>
-                            <div class="muted-copy mt-2"><%= new Date(item.created_at).toLocaleString() %></div>
+                            <div class="muted-copy"><%= new Date(item.created_at).toLocaleString() %></div>
+                            <form action="/sessions/remove-violation/<%= item.id %>" method="POST" onsubmit="return confirm('Remove this violation for <%= item.user_name %>?')">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -119,74 +112,157 @@
 <% } %>
 
 <% if (activeSection === 'directory') { %>
-<section class="row g-4">
-    <div class="col-lg-5">
-        <div class="list-card p-4 h-100">
-            <p class="section-kicker mb-1">Labs</p>
-            <h3 class="mb-3">Occupancy overview</h3>
-            <div class="filter-group filter-toolbar mb-3">
-                <input type="text" class="form-control" placeholder="Search lab" data-filter-key="text">
-                <select class="form-select" data-filter-key="availability">
-                    <option value="">All</option>
-                    <option value="available">Available</option>
-                    <option value="full">Full</option>
-                </select>
-            </div>
-            <div class="d-grid gap-3 filter-targets">
-                <% labs.forEach(lab => { %>
-                    <% const pct = lab.capacity > 0 ? Math.round((lab.current_occupancy / lab.capacity) * 100) : 0; %>
-                    <div class="glass-panel filter-item" data-filter-text="<%= `${lab.name} ${lab.location || ''}`.toLowerCase() %>" data-filter-availability="<%= lab.available_seats > 0 ? 'available' : 'full' %>">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <strong><%= lab.name %></strong>
-                                <div class="muted-copy"><%= lab.location || 'Location not set' %></div>
+<section class="hero-panel mb-4">
+    <div>
+        <p class="section-kicker mb-2">Assistant Console</p>
+        <h2 class="mb-0">Student Directory</h2>
+    </div>
+</section>
+
+<section class="list-card p-4">
+    <div class="filter-group filter-toolbar mb-3">
+        <input type="text" class="form-control" placeholder="Search student by name, enrollment, or department" data-filter-key="text">
+        <select class="form-select" data-filter-key="violation">
+            <option value="">All</option>
+            <option value="flagged">With violations</option>
+            <option value="clear">No violations</option>
+        </select>
+    </div>
+    <div class="table-responsive">
+        <table class="table app-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Enrollment</th>
+                    <th>Department</th>
+                    <th>Violations</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody class="filter-targets">
+                <% students.forEach(student => { %>
+                    <tr class="filter-item" data-filter-text="<%= `${student.name} ${student.enrollment_no || ''} ${student.department || ''} ${student.email || ''}`.toLowerCase() %>" data-filter-violation="<%= student.violation_count > 0 ? 'flagged' : 'clear' %>">
+                        <td>
+                            <div class="user-inline">
+                                <div class="user-avatar-preview user-avatar-preview-sm">
+                                    <% if (student.profile_image) { %>
+                                        <img src="<%= student.profile_image %>" alt="<%= student.name %>">
+                                    <% } else { %>
+                                        <span><%= (student.name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                    <% } %>
+                                </div>
+                                <div>
+                                    <a href="/sessions/student/<%= student.id %>" class="text-decoration-none text-dark">
+                                        <strong><%= student.name %></strong>
+                                    </a><br>
+                                    <span class="muted-copy"><%= student.email %></span>
+                                </div>
                             </div>
-                            <span class="soft-badge <%= lab.available_seats > 0 ? 'teal' : 'red' %>"><%= lab.current_occupancy %>/<%= lab.capacity %></span>
-                        </div>
-                        <div class="occupancy-meter mb-3">
-                            <div class="occupancy-fill" style="width: <%= pct %>%"></div>
-                        </div>
-                        <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark btn-sm w-100">Open Lab</a>
-                    </div>
+                        </td>
+                        <td><%= student.enrollment_no || '-' %></td>
+                        <td><%= student.department || '-' %></td>
+                        <td><span class="soft-badge <%= student.violation_count > 0 ? 'red' : 'ink' %>"><%= student.violation_count || 0 %></span></td>
+                        <td>
+                            <% if (student.suspended_until && new Date(student.suspended_until) > new Date()) { %>
+                                <span class="soft-badge red">Suspended</span>
+                            <% } else if (student.is_active) { %>
+                                <span class="soft-badge teal">Active</span>
+                            <% } else { %>
+                                <span class="soft-badge ink">Inactive</span>
+                            <% } %>
+                            <a href="/sessions/student/<%= student.id %>" class="btn btn-sm btn-outline-dark ms-2">View History</a>
+                        </td>
+                    </tr>
                 <% }) %>
-            </div>
+            </tbody>
+        </table>
+    </div>
+</section>
+<% } %>
+
+<% if (activeSection === 'statistics') { %>
+<section class="hero-panel mb-4">
+    <div>
+        <p class="section-kicker mb-2">Assistant Console</p>
+        <h2 class="mb-0">Analytics & Statistics</h2>
+        <p class="muted-copy mt-2 mb-0">Overview of lab usage and capacity metrics over the last 30 days.</p>
+    </div>
+</section>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="glass-panel p-4 text-center h-100">
+            <i class="bi bi-person-check fs-1 text-primary mb-2 d-block"></i>
+            <h2 class="mb-1"><%= globalStats.total_students || 0 %></h2>
+            <p class="muted-copy mb-0">Unique Students</p>
         </div>
     </div>
-    <div class="col-lg-7">
-        <div class="list-card p-4 h-100">
-            <p class="section-kicker mb-1">Students</p>
-            <h3 class="mb-3">Student directory</h3>
-            <div class="filter-group filter-toolbar mb-3">
-                <input type="text" class="form-control" placeholder="Search student" data-filter-key="text">
-                <select class="form-select" data-filter-key="violation">
-                    <option value="">All</option>
-                    <option value="flagged">With violations</option>
-                    <option value="clear">No violations</option>
-                </select>
-            </div>
-            <div class="table-responsive">
-                <table class="table app-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Enrollment</th>
-                            <th>Department</th>
-                            <th>Violation Count</th>
-                        </tr>
-                    </thead>
-                    <tbody class="filter-targets">
-                        <% students.slice(0, 12).forEach(student => { %>
-                            <tr class="filter-item" data-filter-text="<%= `${student.name} ${student.enrollment_no || ''} ${student.department || ''}`.toLowerCase() %>" data-filter-violation="<%= student.violation_count > 0 ? 'flagged' : 'clear' %>">
-                                <td><%= student.name %></td>
-                                <td><%= student.enrollment_no || '-' %></td>
-                                <td><%= student.department || '-' %></td>
-                                <td><span class="soft-badge <%= student.violation_count > 0 ? 'red' : 'ink' %>"><%= student.violation_count || 0 %></span></td>
-                            </tr>
-                        <% }) %>
-                    </tbody>
-                </table>
-            </div>
+    <div class="col-md-4">
+        <div class="glass-panel p-4 text-center h-100">
+            <i class="bi bi-clock-history fs-1 text-primary mb-2 d-block"></i>
+            <h2 class="mb-1"><%= globalStats.total_hours || 0 %></h2>
+            <p class="muted-copy mb-0">Hours Checked In</p>
         </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-panel p-4 text-center h-100">
+            <i class="bi bi-door-open fs-1 text-primary mb-2 d-block"></i>
+            <h2 class="mb-1"><%= globalStats.total_sessions || 0 %></h2>
+            <p class="muted-copy mb-0">Total Lab Entries</p>
+        </div>
+    </div>
+</div>
+
+<section class="list-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0">Lab Usage Summary (Last 30 Days)</h3>
+    </div>
+    <div class="table-responsive">
+        <table class="table app-table align-middle">
+            <thead>
+                <tr>
+                    <th>Lab</th>
+                    <th>Capacity Limit</th>
+                    <th style="min-width: 150px;">Typical Crowd Size</th>
+                    <th>Days Over-Crowded</th>
+                    <th>Action Needed</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% labStats.forEach(stat => { %>
+                    <% const fillPercent = Math.min(100, Math.round((stat.avg_occupancy / stat.capacity) * 100)) || 0; %>
+                    <% const isOverCapacity = stat.avg_occupancy > stat.capacity; %>
+                    <tr>
+                        <td><strong><%= stat.lab_name %></strong></td>
+                        <td><%= stat.capacity %> seats</td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold <%= isOverCapacity ? 'text-danger' : '' %>"><%= stat.avg_occupancy %></span>
+                                <div class="progress flex-grow-1" style="height: 6px; background-color: rgba(0,0,0,0.1);">
+                                    <div class="progress-bar <%= isOverCapacity ? 'bg-danger' : 'bg-primary' %>" style="width: <%= fillPercent %>%" role="progressbar"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <% if (stat.overfill_days > 0) { %>
+                                <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i><%= stat.overfill_days %> days</span>
+                            <% } else { %>
+                                <span class="muted-copy">0 days</span>
+                            <% } %>
+                        </td>
+                        <td>
+                            <% if (stat.overfill_days > 5) { %>
+                                <span class="soft-badge red">Increase Capacity</span>
+                            <% } else if (stat.overfill_days > 0) { %>
+                                <span class="soft-badge ink">Monitor Activity</span>
+                            <% } else { %>
+                                <span class="soft-badge teal">No Action</span>
+                            <% } %>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
     </div>
 </section>
 <% } %>

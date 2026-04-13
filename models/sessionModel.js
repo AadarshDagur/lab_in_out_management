@@ -2,11 +2,11 @@ const db = require("../config/db");
 
 const LabSession = {
   // Check in a student
-  async checkIn({ user_id, lab_id, seat_id, purpose, checked_in_by }) {
+  async checkIn({ user_id, lab_id, checked_in_by }) {
     const result = await db.query(
-      `INSERT INTO lab_sessions (user_id, lab_id, seat_id, purpose, checked_in_by, status)
-       VALUES ($1, $2, $3, $4, $5, 'active') RETURNING *`,
-      [user_id, lab_id, seat_id || null, purpose, checked_in_by || null]
+      `INSERT INTO lab_sessions (user_id, lab_id, checked_in_by, status)
+       VALUES ($1, $2, $3, 'active') RETURNING *`,
+      [user_id, lab_id, checked_in_by || null]
     );
     return result.rows[0];
   },
@@ -42,11 +42,10 @@ const LabSession = {
   // Get active session for a user
   async getActiveSession(userId) {
     const result = await db.query(
-      `SELECT ls.*, u.name AS user_name, u.profile_image, l.name as lab_name, s.seat_number
+      `SELECT ls.*, u.name AS user_name, u.profile_image, l.name as lab_name
        FROM lab_sessions ls
        JOIN users u ON ls.user_id = u.id
        JOIN labs l ON ls.lab_id = l.id
-       LEFT JOIN seats s ON ls.seat_id = s.id
        WHERE ls.user_id = $1 AND ls.status = 'active'
        LIMIT 1`,
       [userId]
@@ -57,10 +56,9 @@ const LabSession = {
   // Get all active sessions for a lab
   async getActiveSessions(labId) {
     const result = await db.query(
-      `SELECT ls.*, u.name as user_name, u.enrollment_no, u.profile_image, s.seat_number
+      `SELECT ls.*, u.name as user_name, u.enrollment_no, u.profile_image
        FROM lab_sessions ls
        JOIN users u ON ls.user_id = u.id
-       LEFT JOIN seats s ON ls.seat_id = s.id
        WHERE ls.lab_id = $1 AND ls.status = 'active'
        ORDER BY ls.check_in_time DESC`,
       [labId]
@@ -72,11 +70,10 @@ const LabSession = {
   async getAllActiveSessions() {
     const result = await db.query(
       `SELECT ls.*, u.name as user_name, u.enrollment_no, u.profile_image,
-              l.name as lab_name, s.seat_number
+              l.name as lab_name
        FROM lab_sessions ls
        JOIN users u ON ls.user_id = u.id
        JOIN labs l ON ls.lab_id = l.id
-       LEFT JOIN seats s ON ls.seat_id = s.id
        WHERE ls.status = 'active'
        ORDER BY ls.check_in_time DESC`
     );
@@ -86,10 +83,9 @@ const LabSession = {
   // Get session history for a user
   async getUserHistory(userId, limit = 50) {
     const result = await db.query(
-      `SELECT ls.*, l.name as lab_name, s.seat_number
+      `SELECT ls.*, l.name as lab_name
        FROM lab_sessions ls
        JOIN labs l ON ls.lab_id = l.id
-       LEFT JOIN seats s ON ls.seat_id = s.id
        WHERE ls.user_id = $1
        ORDER BY ls.check_in_time DESC
        LIMIT $2`,
@@ -101,10 +97,9 @@ const LabSession = {
   // Get session history for a lab
   async getLabHistory(labId, limit = 100) {
     const result = await db.query(
-      `SELECT ls.*, u.name as user_name, u.enrollment_no, u.profile_image, s.seat_number
+      `SELECT ls.*, u.name as user_name, u.enrollment_no, u.profile_image
        FROM lab_sessions ls
        JOIN users u ON ls.user_id = u.id
-       LEFT JOIN seats s ON ls.seat_id = s.id
        WHERE ls.lab_id = $1
        ORDER BY ls.check_in_time DESC
        LIMIT $2`,
@@ -146,11 +141,10 @@ const LabSession = {
   // Find by ID
   async findById(id) {
     const result = await db.query(
-      `SELECT ls.*, u.name as user_name, u.profile_image, l.name as lab_name, s.seat_number
+      `SELECT ls.*, u.name as user_name, u.profile_image, l.name as lab_name
        FROM lab_sessions ls
        JOIN users u ON ls.user_id = u.id
        JOIN labs l ON ls.lab_id = l.id
-       LEFT JOIN seats s ON ls.seat_id = s.id
        WHERE ls.id = $1`,
       [id]
     );
@@ -167,6 +161,51 @@ const LabSession = {
        WHERE status = 'active'
          AND check_in_time < CURRENT_TIMESTAMP - INTERVAL '${hours} hours'
        RETURNING *`
+    );
+    return result.rows;
+  },
+
+  async getGlobalStatistics(days = 30) {
+    const result = await db.query(
+      `SELECT
+         COUNT(ls.id) as total_sessions,
+         COUNT(DISTINCT ls.user_id) as total_students,
+         ROUND(SUM(ls.duration_minutes) / 60, 1) as total_hours
+       FROM lab_sessions ls
+       WHERE ls.check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
+         AND ls.status = 'completed'`
+    );
+    return result.rows[0];
+  },
+
+  async getLabStatistics(days = 30) {
+    const result = await db.query(
+      `WITH time_events AS (
+           SELECT lab_id, check_in_time AS event_time, 1 AS change 
+           FROM lab_sessions 
+           WHERE check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
+           UNION ALL
+           SELECT lab_id, COALESCE(check_out_time, CURRENT_TIMESTAMP) AS event_time, -1 AS change 
+           FROM lab_sessions 
+           WHERE check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
+       ),
+       running_occupancy AS (
+           SELECT lab_id, event_time, SUM(change) OVER (PARTITION BY lab_id ORDER BY event_time) AS current_occupancy
+           FROM time_events
+       ),
+       daily_peaks AS (
+           SELECT lab_id, MAX(current_occupancy) AS peak_occupancy, DATE(event_time) AS event_date
+           FROM running_occupancy
+           GROUP BY lab_id, DATE(event_time)
+       )
+       SELECT l.id as lab_id, l.name as lab_name, l.capacity,
+              COALESCE(COUNT(dp.event_date) FILTER (WHERE dp.peak_occupancy > l.capacity), 0) AS overfill_days,
+              COALESCE(ROUND(SUM(ls.duration_minutes) / (NULLIF(COUNT(DISTINCT DATE(ls.check_in_time)), 0) * 10 * 60), 1), 0) AS avg_occupancy
+       FROM labs l
+       LEFT JOIN daily_peaks dp ON l.id = dp.lab_id
+       LEFT JOIN lab_sessions ls ON l.id = ls.lab_id AND ls.check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
+       GROUP BY l.id, l.name, l.capacity
+       ORDER BY overfill_days DESC, avg_occupancy DESC`
     );
     return result.rows;
   },

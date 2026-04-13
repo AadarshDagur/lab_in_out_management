@@ -56,28 +56,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("beforeunload", persistSidebarScroll);
   }
 
-  const populateSeatSelect = async (labId, seatSelect) => {
-    if (!seatSelect) return;
-
-    seatSelect.innerHTML = '<option value="">Auto assign</option>';
-    if (!labId) return;
-
-    try {
-      const response = await fetch(`/api/labs/${labId}/seats`);
-      if (!response.ok) return;
-
-      const data = await response.json();
-      (data.seats || []).forEach((seat) => {
-        const option = document.createElement("option");
-        option.value = seat.id;
-        option.textContent = seat.seat_number;
-        seatSelect.appendChild(option);
-      });
-    } catch (error) {
-      console.error("Seat fetch error:", error);
-    }
-  };
-
   // Auto-dismiss alerts after 5 seconds
   const alerts = document.querySelectorAll(".alert-dismissible");
   alerts.forEach((alert) => {
@@ -319,23 +297,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return (a.student.name || "").localeCompare(b.student.name || "");
       })
       .map((item) => item.student);
-
-  const seatAwareForms = document.querySelectorAll(".seat-aware-form");
-  seatAwareForms.forEach((form) => {
-    const labSelect = form.querySelector(".seat-lab-select");
-    const seatSelect = form.querySelector(".seat-select");
-    if (!seatSelect) return;
-
-    const initialLabId =
-      labSelect?.value || form.querySelector('input[name="lab_id"]')?.value || "";
-    populateSeatSelect(initialLabId, seatSelect);
-
-    if (labSelect) {
-      labSelect.addEventListener("change", () => {
-        populateSeatSelect(labSelect.value, seatSelect);
-      });
-    }
-  });
 
   const liveStudentSelectForms = document.querySelectorAll(".live-student-select-form");
   liveStudentSelectForms.forEach((form) => {

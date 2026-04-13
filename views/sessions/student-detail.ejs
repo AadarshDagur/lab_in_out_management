@@ -1,0 +1,118 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Student Profile</p>
+            <div class="d-flex align-items-center gap-3">
+                <div class="user-avatar-preview user-avatar-preview-lg">
+                    <% if (student.profile_image) { %>
+                        <img src="<%= student.profile_image %>" alt="<%= student.name %>">
+                    <% } else { %>
+                        <span><%= (student.name || 'U').trim().charAt(0).toUpperCase() %></span>
+                    <% } %>
+                </div>
+                <div>
+                    <h2 class="mb-1"><%= student.name %></h2>
+                    <p class="muted-copy mb-0"><%= student.enrollment_no || 'No Enrollment ID' %> • <%= student.department || 'No Department' %></p>
+                </div>
+            </div>
+        </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <a href="/dashboard?section=directory" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Directory
+            </a>
+            <% if (student.suspended_until && new Date(student.suspended_until) > new Date()) { %>
+                <span class="soft-badge red">Suspended until <%= new Date(student.suspended_until).toLocaleDateString() %></span>
+            <% } else if (student.is_active) { %>
+                <span class="soft-badge teal">Active Status</span>
+            <% } else { %>
+                <span class="soft-badge ink">Inactive Account</span>
+            <% } %>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <section class="list-card p-4 h-100">
+            <p class="section-kicker mb-1">Session Records</p>
+            <h3 class="mb-3">Recent Lab History</h3>
+            <% if (sessions.length === 0) { %>
+                <p class="muted-copy mb-0">No lab sessions recorded yet.</p>
+            <% } else { %>
+                <div class="table-responsive">
+                    <table class="table app-table">
+                        <thead>
+                            <tr>
+                                <th>Lab</th>
+                                <th>Check In</th>
+                                <th>Check Out</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% sessions.forEach(s => { %>
+                                <tr>
+                                    <td><%= s.lab_name %></td>
+                                    <td><%= new Date(s.check_in_time).toLocaleString() %></td>
+                                    <td><%= s.check_out_time ? new Date(s.check_out_time).toLocaleString() : '-' %></td>
+                                    <td><%= s.duration_minutes ? Math.round(s.duration_minutes) + ' min' : '-' %></td>
+                                    <td>
+                                        <span class="soft-badge <%= s.status === 'active' ? 'teal' : 'ink' %>">
+                                            <%= s.status %>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </section>
+    </div>
+    
+    <div class="col-lg-4">
+        <section class="list-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <p class="section-kicker mb-1">Conduct</p>
+                    <h3 class="mb-0">Violations</h3>
+                </div>
+                <span class="soft-badge <%= student.violation_count > 0 ? 'red' : 'teal' %>">
+                    Count: <%= student.violation_count || 0 %>
+                </span>
+            </div>
+            
+            <% if (violations.length === 0) { %>
+                <div class="p-3 bg-light rounded text-center">
+                    <i class="bi bi-shield-check text-success fs-2 mb-2 d-block"></i>
+                    <p class="muted-copy mb-0">Clean record. No violations found.</p>
+                </div>
+            <% } else { %>
+                <div class="d-grid gap-3">
+                    <% violations.forEach(item => { %>
+                        <div class="glass-panel p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <strong><%= item.lab_name %></strong>
+                                <small class="muted-copy"><%= new Date(item.created_at).toLocaleDateString() %></small>
+                            </div>
+                            <p class="mb-2"><%= item.note || 'No note provided' %></p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted" style="font-size: 0.75rem;">
+                                    Marked by: <%= item.marked_by_name || 'System' %>
+                                </small>
+                                <form action="/sessions/remove-violation/<%= item.id %>" method="POST" class="d-inline" onsubmit="return confirm('Remove this violation?')">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 0.75rem;">Remove</button>
+                                </form>
+                            </div>
+                        </div>
+                    <% }) %>
+                </div>
+            <% } %>
+        </section>
+    </div>
+</div>
+
+<%- include('../partials/footer') %>

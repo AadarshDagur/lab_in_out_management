@@ -5,18 +5,10 @@ const Entry = require("../models/entryModel");
 const Settings = require("../models/settingsModel");
 
 const sessionController = {
-  async resolveSeatForLab(labId, requestedSeatId = null) {
-    if (requestedSeatId) return requestedSeatId;
-
-    const seats = await Lab.getSeats(labId);
-    const availableSeat = seats.find((seat) => !seat.is_occupied);
-    return availableSeat ? availableSeat.id : null;
-  },
-
   async checkIn(req, res) {
     try {
       const requester = req.session.user;
-      const { lab_id, seat_id, purpose, user_id } = req.body;
+      const { lab_id, user_id } = req.body;
       const targetUserId =
         requester.role === "student" ? requester.id : parseInt(user_id, 10);
 
@@ -45,19 +37,11 @@ const sessionController = {
         return res.redirect(`/labs/${lab.id}`);
       }
 
-      const occupancy = await Lab.getOccupancy(lab_id);
-      if (occupancy >= lab.capacity) {
-        req.flash("error", `${lab.name} is full right now`);
-        return res.redirect("/labs");
-      }
-
-      const assignedSeatId = await sessionController.resolveSeatForLab(lab_id, seat_id || null);
+      // No capacity limit — allow over-capacity check-ins
 
       await LabSession.checkIn({
         user_id: targetUserId,
         lab_id,
-        seat_id: assignedSeatId,
-        purpose,
         checked_in_by: requester.role === "student" ? null : requester.id,
       });
 
@@ -174,7 +158,7 @@ const sessionController = {
 
   async markViolation(req, res) {
     try {
-      const { identifier, user_id, lab_id, note, case_type, seat_id, purpose } = req.body;
+      const { identifier, user_id, lab_id, note, case_type } = req.body;
 
       if ((!identifier && !user_id) || !lab_id) {
         req.flash("error", "Student and lab are required");
@@ -253,35 +237,9 @@ const sessionController = {
       });
 
       if (caseType === "missing_entry") {
-        const occupancy = await Lab.getOccupancy(lab.id);
-        if (occupancy >= lab.capacity) {
-          req.flash("error", `${lab.name} is full right now. Violation recorded, but check-in was not completed.`);
-          return res.redirect("back");
-        }
-
-        const requestedSeatId = seat_id ? parseInt(seat_id, 10) : null;
-        if (requestedSeatId) {
-          const seats = await Lab.getSeats(lab.id);
-          const selectedSeat = seats.find((seat) => Number(seat.id) === requestedSeatId);
-
-          if (!selectedSeat) {
-            req.flash("error", "Selected seat is invalid for this lab");
-            return res.redirect("back");
-          }
-
-          if (selectedSeat.is_occupied) {
-            req.flash("error", "Selected seat is already occupied");
-            return res.redirect("back");
-          }
-        }
-
-        const assignedSeatId = await sessionController.resolveSeatForLab(lab.id, requestedSeatId);
-        const entryPurpose = purpose && purpose.trim() ? purpose.trim() : "Missing entry adjustment";
         await LabSession.checkIn({
           user_id: student.id,
           lab_id: lab.id,
-          seat_id: assignedSeatId,
-          purpose: entryPurpose,
           checked_in_by: req.session.user.id,
         });
       }
@@ -312,6 +270,52 @@ const sessionController = {
       console.error("Violation marking error:", error);
       req.flash("error", "Unable to mark violation");
       return res.redirect("back");
+    }
+  },
+
+  async removeViolation(req, res) {
+    try {
+      const violationId = req.params.id;
+      const updatedStudent = await Entry.removeViolation(parseInt(violationId, 10));
+
+      if (!updatedStudent) {
+        req.flash("error", "Violation not found");
+        return res.redirect("back");
+      }
+
+      req.flash(
+        "success",
+        `Violation removed for ${updatedStudent.name}. New count: ${updatedStudent.violation_count}`
+      );
+      return res.redirect("back");
+    } catch (error) {
+      console.error("Remove violation error:", error);
+      req.flash("error", "Failed to remove violation");
+      return res.redirect("back");
+    }
+  },
+
+  async studentDetail(req, res) {
+    try {
+      const student = await User.findById(req.params.id);
+      if (!student || student.role !== "student") {
+        req.flash("error", "Student not found");
+        return res.redirect("/dashboard?section=directory");
+      }
+
+      const sessions = await LabSession.getUserHistory(student.id, 50);
+      const violations = await Entry.getUserViolations(student.id);
+
+      res.render("sessions/student-detail", {
+        title: `${student.name} — Student Detail`,
+        student,
+        sessions,
+        violations,
+      });
+    } catch (error) {
+      console.error("Student detail error:", error);
+      req.flash("error", "Failed to load student details");
+      return res.redirect("/dashboard?section=directory");
     }
   },
 };

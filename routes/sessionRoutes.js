@@ -58,4 +58,20 @@ router.get(
   sessionController.labHistory
 );
 
+// POST /sessions/remove-violation/:id - assistant removes a violation
+router.post(
+  "/remove-violation/:id",
+  isAuthenticated,
+  authorizeRoles("assistant"),
+  sessionController.removeViolation
+);
+
+// GET /sessions/student/:id - student detail (assistant)
+router.get(
+  "/student/:id",
+  isAuthenticated,
+  authorizeRoles("assistant"),
+  sessionController.studentDetail
+);
+
 module.exports = router;

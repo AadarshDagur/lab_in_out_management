@@ -249,20 +249,6 @@ app.get("/api/lab-occupancy/:labId", isAuthenticated, disallowRoles("admin"), as
   }
 });
 
-app.get("/api/labs/:labId/seats", isAuthenticated, disallowRoles("admin"), async (req, res) => {
-  try {
-    const Lab = require("./models/labModel");
-    const seats = await Lab.getSeats(req.params.labId);
-    res.json({
-      seats: seats
-        .filter((seat) => !seat.is_occupied)
-        .map((seat) => ({ id: seat.id, seat_number: seat.seat_number })),
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to get seats" });
-  }
-});
-
 // =========================
 // Error Handling
 // =========================
@@ -279,6 +265,7 @@ app.use((err, req, res, next) => {
   console.error("Server error:", err);
   res.status(500).send("Something went wrong! Please try again later.");
 });
+
 
 // =========================
 // Start Server / Bootstrap
@@ -297,6 +284,16 @@ function ensureAppReady() {
       await ensurePasswordResetTable();
       await ensureDatabaseCleanup();
       await ensureViolationTerminology();
+      
+      try {
+        const LabSession = require("./models/sessionModel");
+        const closed = await LabSession.autoCloseStale(16); // close sessions older than 16 hours
+        if (closed && closed.length > 0) {
+            console.log(`[Auto-Close] Automatically closed ${closed.length} stale sessions from yesterday.`);
+        }
+      } catch (err) {
+        console.error("Failed to auto-close stale sessions:", err.message);
+      }
     })().catch((error) => {
       bootstrapPromise = null;
       throw error;

@@ -22,7 +22,7 @@
                 <p class="muted-copy mb-0">No sessions recorded for this lab.</p>
             <% } else { %>
                 <div class="filter-group filter-toolbar mb-3">
-                    <input type="text" id="labHistorySearchInput" class="form-control" placeholder="Search student, seat, purpose, or status">
+                    <input type="text" id="labHistorySearchInput" class="form-control" placeholder="Search student or status">
                 </div>
                 <div class="table-responsive">
                     <table class="table app-table" id="labHistoryTable">
@@ -30,8 +30,6 @@
                             <tr>
                                 <th>#</th>
                                 <th>Student</th>
-                                <th>Seat</th>
-                                <th>Purpose</th>
                                 <th>Check In</th>
                                 <th>Check Out</th>
                                 <th>Duration</th>
@@ -40,7 +38,7 @@
                         </thead>
                         <tbody>
                             <% sessions.forEach((s, i) => { %>
-                                <tr class="lab-history-row" data-filter-text="<%= [s.user_name, s.enrollment_no || '-', s.seat_number || '-', s.purpose || '-', s.status].join(' ').toLowerCase() %>">
+                                <tr class="lab-history-row" data-filter-text="<%= [s.user_name, s.enrollment_no || '-', s.status].join(' ').toLowerCase() %>">
                                     <td><%= i + 1 %></td>
                                     <td>
                                         <div class="user-inline">
@@ -57,8 +55,6 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td><%= s.seat_number || '-' %></td>
-                                    <td><%= s.purpose || '-' %></td>
                                     <td><%= new Date(s.check_in_time).toLocaleString() %></td>
                                     <td><%= s.check_out_time ? new Date(s.check_out_time).toLocaleString() : '-' %></td>
                                     <td><%= s.duration_minutes ? Math.round(s.duration_minutes) + ' min' : '-' %></td>

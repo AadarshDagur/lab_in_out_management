@@ -17,8 +17,6 @@
                 <tr>
                     <th>#</th>
                     <th>Lab</th>
-                    <th>Seat</th>
-                    <th>Purpose</th>
                     <th>Check In</th>
                     <th>Check Out</th>
                     <th>Duration</th>
@@ -27,11 +25,9 @@
             </thead>
             <tbody>
                 <% sessions.forEach((s, i) => { %>
-                    <tr class="history-row" data-filter-text="<%= [s.lab_name, s.seat_number || '-', s.purpose || '-', s.status].join(' ').toLowerCase() %>">
+                    <tr class="history-row" data-filter-text="<%= [s.lab_name, s.status].join(' ').toLowerCase() %>">
                         <td><%= i + 1 %></td>
                         <td><%= s.lab_name %></td>
-                        <td><%= s.seat_number || '-' %></td>
-                        <td><%= s.purpose || '-' %></td>
                         <td><%= new Date(s.check_in_time).toLocaleString() %></td>
                         <td><%= s.check_out_time ? new Date(s.check_out_time).toLocaleString() : '-' %></td>
                         <td><%= s.duration_minutes ? Math.round(s.duration_minutes) + ' min' : '-' %></td>

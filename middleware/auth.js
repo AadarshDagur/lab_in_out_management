@@ -6,6 +6,15 @@ function getHomePathForRole(user) {
   return "/dashboard";
 }
 
+function getInactiveUserMessage(user) {
+  if (user && user.suspended_until) {
+    const reactivateDate = new Date(user.suspended_until).toLocaleDateString();
+    return `Your account is suspended until ${reactivateDate}. Contact admin.`;
+  }
+
+  return "Your account has been deactivated. Contact admin.";
+}
+
 // Check if user is logged in
 function isAuthenticated(req, res, next) {
   if (req.session && req.session.user) {
@@ -66,8 +75,18 @@ async function setLocals(req, res, next) {
       const freshUser = await User.findById(req.session.user.id);
 
       if (!freshUser || !freshUser.is_active) {
-        req.session.destroy(() => {});
+        const message = getInactiveUserMessage(freshUser);
+        req.session.user = null;
+        req.flash("error", message);
         res.locals.currentUser = null;
+
+        return req.session.save(() => {
+          if (req.xhr || req.path.startsWith("/api/")) {
+            return res.status(401).json({ error: message });
+          }
+
+          return res.redirect("/auth/login");
+        });
       } else {
         req.session.user = {
           id: freshUser.id,
