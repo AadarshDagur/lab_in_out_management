@@ -6,7 +6,7 @@ const pool = new Pool({
   ...(hasDatabaseUrl
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
+        ssl: { require: true, rejectUnauthorized: false },
       }
     : {
         host: process.env.DB_HOST || "localhost",
@@ -14,7 +14,7 @@ const pool = new Pool({
         database: process.env.DB_NAME || "lab_management",
         user: process.env.DB_USER || "postgres",
         password: process.env.DB_PASSWORD || "",
-        ssl: false,
+        ssl: isProduction ? { require: true, rejectUnauthorized: false } : false,
       }),
   keepAlive: true,
   connectionTimeoutMillis: 10000,
