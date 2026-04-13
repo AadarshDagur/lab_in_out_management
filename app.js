@@ -262,6 +262,9 @@ app.use((req, res) => {
 
 // General error handler
 app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
   console.error("Server error:", err);
   res.status(500).send("Something went wrong! Please try again later.");
 });
