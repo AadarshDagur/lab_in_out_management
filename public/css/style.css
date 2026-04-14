@@ -217,12 +217,13 @@ main {
   left: 0;
   bottom: 0;
   height: 100vh;
+  height: 100dvh;
   z-index: 1000;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  padding: 1.5rem 1rem 1rem;
+  padding: 1.5rem 1rem 2rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
