@@ -4,13 +4,20 @@ const db = require("../config/db");
 const { sendResetEmail } = require("../config/mailer");
 
 function getResetBaseUrl(req) {
-  const configuredBaseUrl = (process.env.APP_BASE_URL || "").trim();
+  const configuredBaseUrl = process.env.APP_BASE_URL;
   if (configuredBaseUrl) {
-    return configuredBaseUrl.replace(/\/+$/, "");
+    return configuredBaseUrl.trim().replace(/\/+$/, "");
   }
 
-  const host = req.get("host") || `localhost:${process.env.PORT || 3000}`;
-  return `${req.protocol}://${host}`;
+  // If local development, generate local URL
+  const host = req.get("x-forwarded-host") || req.get("host");
+  if (host && host.includes("localhost")) {
+    const protocol = req.get("x-forwarded-proto") || req.protocol;
+    return `${protocol}://${host}`;
+  }
+
+  // Default to the provided production base URL
+  return "https://lab-in-out-management.vercel.app";
 }
 
 const resetController = {
