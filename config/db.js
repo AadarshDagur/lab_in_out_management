@@ -18,6 +18,9 @@ const pool = new Pool({
       }),
   keepAlive: true,
   connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 3000, // close idle connections quickly in serverless
+  max: isProduction ? 1 : 10,
+  allowExitOnIdle: true,
 });
 
 // Avoid extra startup DB work on serverless cold starts.
