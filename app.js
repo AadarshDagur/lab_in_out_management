@@ -202,32 +202,6 @@ app.use(
   })
 );
 
-// Avoid Vercel serverless race conditions by ensuring session saves finish before response
-app.use((req, res, next) => {
-  const originalRedirect = res.redirect;
-  const originalRender = res.render;
-
-  res.redirect = function (...args) {
-    if (req.session && req.session.save) {
-      return req.session.save(() => {
-        originalRedirect.apply(res, args);
-      });
-    }
-    return originalRedirect.apply(res, args);
-  };
-
-  res.render = function (...args) {
-    if (req.session && req.session.save) {
-      return req.session.save(() => {
-        originalRender.apply(res, args);
-      });
-    }
-    return originalRender.apply(res, args);
-  };
-
-  next();
-});
-
 // Flash messages
 app.use(flash());
 
