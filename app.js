@@ -1,7 +1,6 @@
 require("dotenv").config();
 const express = require("express");
-const session = require("express-session");
-const pgSession = require("connect-pg-simple")(session);
+const cookieSession = require("cookie-session");
 const flash = require("connect-flash");
 const methodOverride = require("method-override");
 const path = require("path");
@@ -183,22 +182,13 @@ app.use(methodOverride("_method"));
 
 // Session configuration
 app.use(
-  session({
-    store: new pgSession({
-      pool: pool,
-      tableName: "session",
-      createTableIfMissing: !isProduction,
-    }),
-    proxy: isProduction,
-    secret: process.env.SESSION_SECRET || "lab-management-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProduction ? "auto" : false,
-    },
+  cookieSession({
+    name: "session",
+    keys: [process.env.SESSION_SECRET || "lab-management-secret-key"],
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    secure: isProduction,
+    httpOnly: true,
+    sameSite: "lax",
   })
 );
 

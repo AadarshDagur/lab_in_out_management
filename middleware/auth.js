@@ -76,17 +76,15 @@ async function setLocals(req, res, next) {
 
       if (!freshUser || !freshUser.is_active) {
         const message = getInactiveUserMessage(freshUser);
-        req.session.user = null;
+        req.session = null;
         req.flash("error", message);
         res.locals.currentUser = null;
 
-        return req.session.save(() => {
-          if (req.xhr || req.path.startsWith("/api/")) {
-            return res.status(401).json({ error: message });
-          }
+        if (req.xhr || req.path.startsWith("/api/")) {
+          return res.status(401).json({ error: message });
+        }
 
-          return res.redirect("/auth/login");
-        });
+        return res.redirect("/auth/login");
       } else {
         req.session.user = {
           id: freshUser.id,

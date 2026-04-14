@@ -12,7 +12,6 @@ DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS system_settings CASCADE;
 DROP TABLE IF EXISTS labs CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS session CASCADE;
 
 -- ============================================
 -- 1. Users Table
@@ -75,18 +74,6 @@ CREATE TABLE system_settings (
 
 INSERT INTO system_settings (key, value)
 VALUES ('violation_limit', '3');
-
--- ============================================
--- 6. Express Session Store Table
--- ============================================
-CREATE TABLE session (
-    sid VARCHAR NOT NULL COLLATE "default",
-    sess JSON NOT NULL,
-    expire TIMESTAMP(6) NOT NULL,
-    PRIMARY KEY (sid)
-);
-
-CREATE INDEX idx_session_expire ON session (expire);
 
 -- ============================================
 -- 7. Password Reset Tokens

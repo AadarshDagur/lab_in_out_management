@@ -66,15 +66,7 @@ const authController = {
 
       req.flash("success", `Welcome back, ${user.name}!`);
       const redirectTo = req.body.redirect || authController.getDefaultRedirectForUser(user);
-      return req.session.save((saveError) => {
-        if (saveError) {
-          console.error("Session save error:", saveError);
-          req.flash("error", "Something went wrong. Please try again.");
-          return res.redirect("/auth/login");
-        }
-
-        return res.redirect(redirectTo);
-      });
+      return res.redirect(redirectTo);
     } catch (err) {
       console.error("Login error:", err);
       req.flash("error", "Something went wrong. Please try again.");
@@ -84,11 +76,8 @@ const authController = {
 
   // POST /auth/logout
   logout(req, res) {
-    req.session.destroy((err) => {
-      if (err) console.error("Logout error:", err);
-      res.clearCookie("connect.sid");
-      res.redirect("/auth/login");
-    });
+    req.session = null;
+    res.redirect("/auth/login");
   },
 };
 

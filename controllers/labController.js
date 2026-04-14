@@ -78,9 +78,8 @@ const labController = {
       res.render("labs/manage", { title: "Manage Labs", labs });
     } catch (err) {
       console.error("Error fetching labs:", err);
-      req.session.destroy(() => {
-        res.redirect("/auth/login?error=labs_failed");
-      });
+      req.session = null;
+      return res.redirect("/auth/login?error=labs_failed");
     }
   },
 

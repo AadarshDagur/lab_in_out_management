@@ -21,9 +21,8 @@ const dashboardController = {
       }
     } catch (err) {
       console.error("Dashboard error:", err);
-      req.session.destroy(() => {
-        res.redirect("/auth/login?error=dashboard_failed");
-      });
+      req.session = null;
+      return res.redirect("/auth/login?error=dashboard_failed");
     }
   },
 
