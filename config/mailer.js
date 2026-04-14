@@ -22,7 +22,7 @@ transporter.verify((error) => {
 
 async function sendResetEmail(toEmail, userName, resetUrl) {
   const mailOptions = {
-    from: `"Lab Manager" <${process.env.SMTP_USER || "noreply@labmanager.com"}>`,
+    from: `"Lab Management" <${process.env.SMTP_USER || "noreply@labmanagement.com"}>`,
     to: toEmail,
     subject: "Password Reset - Lab In/Out Management",
     text: `Hi ${userName},
@@ -38,7 +38,7 @@ If you did not request this, you can ignore this email.`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: #0d6efd; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-          <h1 style="margin: 0;">Lab Manager</h1>
+          <h1 style="margin: 0;">Lab Management</h1>
           <p style="margin: 5px 0 0;">Password Reset Request</p>
         </div>
         <div style="background: #f8f9fa; padding: 30px; border: 1px solid #dee2e6; border-radius: 0 0 8px 8px;">
