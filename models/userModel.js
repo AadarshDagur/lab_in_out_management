@@ -56,7 +56,7 @@ const User = {
 
   // Update user
   async update(id, fields) {
-    const { name, email, department, phone, is_active, profile_image, clear_profile_image } = fields;
+    const { name, email, department, phone, is_active, profile_image, clear_profile_image, enrollment_no } = fields;
     const result = await db.query(
       `UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email),
        department = COALESCE($3, department), phone = COALESCE($4, phone),
@@ -66,9 +66,10 @@ const User = {
          WHEN $7::text IS NOT NULL THEN $7::text
          ELSE profile_image
        END,
+       enrollment_no = COALESCE($8, enrollment_no),
        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8 RETURNING *`,
-      [name, email, department, phone, is_active, Boolean(clear_profile_image), profile_image || null, id]
+       WHERE id = $9 RETURNING *`,
+      [name, email, department, phone, is_active, Boolean(clear_profile_image), profile_image || null, enrollment_no, id]
     );
     return result.rows[0];
   },
@@ -157,6 +158,61 @@ const User = {
       [id]
     );
     return result.rows[0];
+  },
+
+  async bulkCreate(users) {
+    const created = [];
+    const errors = [];
+
+    for (let i = 0; i < users.length; i++) {
+      const u = users[i];
+      const rowNum = i + 2; // +2 because row 1 is header, data starts at row 2
+      try {
+        if (!u.name || !u.name.trim()) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Name is required" });
+          continue;
+        }
+        if (!u.email || !u.email.trim()) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Email is required" });
+          continue;
+        }
+        if (!u.password || u.password.length < 6) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Password must be at least 6 characters" });
+          continue;
+        }
+        if (!u.enrollment_no || !u.enrollment_no.trim()) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Enrollment/Staff ID is required" });
+          continue;
+        }
+
+        const existingEmail = await this.findByEmail(u.email.trim());
+        if (existingEmail) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Email already exists" });
+          continue;
+        }
+
+        const existingEnrollment = await this.findByEnrollment(u.enrollment_no.trim());
+        if (existingEnrollment) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Enrollment/Staff ID already exists" });
+          continue;
+        }
+
+        const validRoles = ["student", "assistant", "admin"];
+        const role = validRoles.includes(u.role) ? u.role : "student";
+
+        const password_hash = await bcrypt.hash(u.password, SALT_ROUNDS);
+        const result = await db.query(
+          `INSERT INTO users (name, email, password_hash, role, enrollment_no, department, phone)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+          [u.name.trim(), u.email.trim(), password_hash, role, u.enrollment_no.trim(), u.department || null, u.phone || null]
+        );
+        created.push(result.rows[0]);
+      } catch (err) {
+        errors.push({ row: rowNum, name: u.name, email: u.email, reason: err.message || "Unknown error" });
+      }
+    }
+
+    return { created, errors };
   },
 };
 

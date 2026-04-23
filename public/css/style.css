@@ -74,12 +74,20 @@ main {
   align-items: center;
   justify-content: center;
   font-size: 1.15rem;
-  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease, left 0.25s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .sidebar-toggle:hover {
   background: #fff;
   transform: translateY(-1px);
+}
+
+.modal-backdrop {
+  z-index: 1300;
+}
+
+.modal {
+  z-index: 1310;
 }
 
 .public-shell {
@@ -548,6 +556,7 @@ main {
   vertical-align: middle;
   border-color: rgba(21, 32, 51, 0.08);
   background: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
 }
 
 .missing-entry-search {
@@ -648,11 +657,16 @@ main {
   color: var(--ink);
 }
 
-.form-control,
-.form-select {
+.form-control {
   border-radius: 12px;
   border-color: rgba(31, 41, 55, 0.14);
   padding: 0.78rem 0.9rem;
+}
+
+.form-select {
+  border-radius: 12px;
+  border-color: rgba(31, 41, 55, 0.14);
+  padding: 0.78rem 2.25rem 0.78rem 0.9rem;
 }
 
 .form-control:focus,
@@ -815,6 +829,10 @@ main {
     display: inline-flex;
   }
 
+  body.sidebar-open .sidebar-toggle {
+    left: 212px;
+  }
+
   .app-sidebar {
     position: fixed;
     width: 260px;
@@ -822,6 +840,10 @@ main {
     border-bottom: none;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
+  }
+
+  .sidebar-brand {
+    padding-right: 3rem;
   }
 
   .app-main {
@@ -873,4 +895,282 @@ main {
   }
 
 
+}
+
+/* =============================================
+   Statistics Page
+   ============================================= */
+
+.stats-lab-cards {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.stats-lab-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.1rem 1.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--card-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  min-width: 130px;
+  flex: 1;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stats-lab-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.stats-lab-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #dbe7f5, #eef4fb);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.stats-lab-card h5 {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.chart-toggle-group {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.chart-toggle-btn {
+  background: var(--bg-soft);
+  border: none;
+  padding: 0.4rem 0.7rem;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.chart-toggle-btn:hover {
+  color: var(--brand);
+}
+
+.chart-toggle-btn.active {
+  background: var(--brand);
+  color: #fff;
+}
+
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.chart-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.bounded-history-table {
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  border: 1px solid rgba(21, 32, 51, 0.08);
+  border-radius: 16px;
+}
+
+.bounded-history-table .app-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.bounded-violations-list {
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* =============================================
+   CSV Bulk Upload
+   ============================================= */
+
+.csv-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 2rem;
+  border: 2px dashed rgba(31, 79, 143, 0.25);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(219, 231, 245, 0.25), rgba(238, 244, 251, 0.25));
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  text-align: center;
+}
+
+.csv-drop-zone i {
+  font-size: 2.5rem;
+  color: var(--brand);
+  margin-bottom: 0.75rem;
+}
+
+.csv-drop-zone:hover,
+.csv-drop-zone.drag-over {
+  border-color: var(--brand);
+  background: linear-gradient(180deg, rgba(219, 231, 245, 0.5), rgba(238, 244, 251, 0.5));
+}
+
+.csv-file-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =============================================
+   Profile Page
+   ============================================= */
+
+.user-avatar-preview-xl {
+  width: 120px;
+  min-width: 120px;
+  height: 120px;
+  min-height: 120px;
+  border-radius: 999px;
+  font-size: 2.5rem;
+}
+
+.profile-avatar-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.profile-avatar-edit {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  border: 3px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.profile-avatar-edit:hover {
+  background: var(--brand-deep);
+  transform: scale(1.1);
+}
+
+.role-pill-lg {
+  display: inline-block;
+  padding: 0.3rem 1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #dbe7f5, #eef4fb);
+  color: var(--brand-deep);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.04em;
+}
+
+.profile-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.profile-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.profile-info-item > i {
+  width: 20px;
+  text-align: center;
+  color: var(--brand);
+  font-size: 1.1rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.profile-info-item small {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.profile-info-item p {
+  font-weight: 500;
+}
+
+@media (max-width: 992px) {
+  .stats-section-head {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .stats-section-head .form-select,
+  .stats-section-head .chart-toggle-group {
+    width: 100%;
+  }
+
+  .stats-section-head .chart-toggle-btn {
+    flex: 1;
+  }
+
+  .chart-container {
+    height: 260px !important;
+    max-width: 100% !important;
+  }
+
+  .bounded-history-table {
+    max-height: 420px;
+  }
+
+  .bounded-violations-list {
+    max-height: 420px;
+  }
+
+  .stats-lab-cards {
+    gap: 0.75rem;
+  }
+
+  .stats-lab-card {
+    padding: 0.85rem 1rem;
+    min-width: 100px;
+  }
+
+  .user-avatar-preview-xl {
+    width: 96px;
+    min-width: 96px;
+    height: 96px;
+    min-height: 96px;
+    font-size: 2rem;
+  }
 }

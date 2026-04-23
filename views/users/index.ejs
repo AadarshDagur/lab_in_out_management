@@ -1,6 +1,11 @@
 <%- include('../partials/header') %>
 
-<h2 class="mb-4"><i class="bi bi-people-fill me-2"></i>Manage Users</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-people-fill me-2"></i>Manage Users</h2>
+    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
+        <i class="bi bi-cloud-arrow-up me-1"></i> Upload CSV
+    </button>
+</div>
 
 <!-- Add New User Form -->
 <div class="card mb-4">
@@ -77,6 +82,64 @@
         </div>
     </div>
 </div>
+
+<% if (typeof bulkResults !== 'undefined' && bulkResults) { %>
+<div class="card mb-4 border-info" id="bulkResultsCard">
+    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clipboard-data me-2"></i>Upload Results</h5>
+        <button type="button" class="btn-close btn-close-white" id="bulkResultsCloseBtn" aria-label="Close upload results"></button>
+    </div>
+    <div class="card-body py-3">
+        <div class="row g-3 mb-2 text-center">
+            <div class="col-md-4">
+                <div class="stat-tile teal border rounded p-2">
+                    <small class="muted-copy text-uppercase d-block">Created</small>
+                    <h3 class="mb-0 text-success"><%= bulkResults.created.length %></h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-tile amber border rounded p-2">
+                    <small class="muted-copy text-uppercase d-block">Skipped</small>
+                    <h3 class="mb-0 text-warning"><%= bulkResults.skipped %></h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-tile red border rounded p-2">
+                    <small class="muted-copy text-uppercase d-block">Failed</small>
+                    <h3 class="mb-0 text-danger"><%= bulkResults.errors.length %></h3>
+                </div>
+            </div>
+        </div>
+        
+        <% if (bulkResults.errors && bulkResults.errors.length > 0) { %>
+            <hr>
+            <p class="text-danger fw-bold mb-2"><i class="bi bi-exclamation-octagon me-1"></i> Error Details:</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0" style="font-size: 0.9rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="80">Row</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% bulkResults.errors.forEach(e => { %>
+                            <tr>
+                                <td class="text-center"><%= e.row %></td>
+                                <td><%= e.name || '-' %></td>
+                                <td><%= e.email || '-' %></td>
+                                <td class="text-danger"><%= e.reason %></td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } %>
+    </div>
+</div>
+<% } %>
 
 <!-- Tabs for different roles -->
 <ul class="nav nav-tabs mb-3" id="userTabs" role="tablist">
@@ -326,5 +389,121 @@
         <% } %>
     </div>
 </div>
+
+<!-- Bulk Upload Modal -->
+<div class="modal fade" id="bulkUploadModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="bulkUploadModalTitle">
+                    <i class="bi bi-cloud-arrow-up me-2"></i>Bulk Upload Users
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form action="/users/bulk-upload" method="POST" enctype="multipart/form-data" id="bulkUploadForm">
+                    <div class="alert alert-info py-2 px-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Download the <a href="/users/bulk-upload/template" class="alert-link">CSV Template</a> or ensure your CSV has these exact column headers:
+                        <br><code>name, email, password, role, enrollment_no, department, phone</code>
+                    </div>
+
+                    <div class="csv-drop-zone mb-4 bg-light text-center border p-4 rounded" id="csvDropZone" style="border: 2px dashed #dee2e6 !important;">
+                        <i class="bi bi-file-earmark-spreadsheet text-primary" style="font-size: 2.5rem;"></i>
+                        <p class="mb-1 mt-2"><strong>Drag & drop your CSV file here</strong></p>
+                        <p class="muted-copy mb-3">or click to browse</p>
+                        <input type="file" name="csv_file" id="csvFileInput" accept=".csv" class="d-none" required>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="csvBrowseBtn">
+                            <i class="bi bi-folder2-open me-1"></i>Browse Files
+                        </button>
+                        <div class="csv-file-info d-none mt-3" id="csvFileInfo">
+                            <div class="d-inline-block bg-white border p-2 rounded shadow-sm">
+                                <span class="text-success"><i class="bi bi-file-earmark-check me-1"></i><span id="csvFileName" class="fw-bold"></span></span>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="csvRemoveBtn">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100" id="uploadBtn" disabled>
+                        <i class="bi bi-upload me-2"></i>Upload & Process
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const fileInput = document.getElementById('csvFileInput');
+        const browseBtn = document.getElementById('csvBrowseBtn');
+        const dropZone = document.getElementById('csvDropZone');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInfo = document.getElementById('csvFileInfo');
+        const fileName = document.getElementById('csvFileName');
+        const removeBtn = document.getElementById('csvRemoveBtn');
+        const bulkResultsCard = document.getElementById('bulkResultsCard');
+        const bulkResultsCloseBtn = document.getElementById('bulkResultsCloseBtn');
+
+        if (bulkResultsCard && bulkResultsCloseBtn) {
+            bulkResultsCloseBtn.addEventListener('click', () => {
+                bulkResultsCard.remove();
+            });
+        }
+
+        if(browseBtn && fileInput) {
+            browseBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', handleFileSelect);
+
+            if(dropZone) {
+                dropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('border-primary');
+                });
+
+                dropZone.addEventListener('dragleave', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('border-primary');
+                });
+
+                dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('border-primary');
+                    if (e.dataTransfer.files.length) {
+                        fileInput.files = e.dataTransfer.files;
+                        handleFileSelect();
+                    }
+                });
+            }
+
+            removeBtn.addEventListener('click', () => {
+                fileInput.value = '';
+                fileInfo.classList.add('d-none');
+                uploadBtn.disabled = true;
+            });
+        }
+
+        function handleFileSelect() {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                if (file.name.endsWith('.csv')) {
+                    fileName.textContent = file.name;
+                    fileInfo.classList.remove('d-none');
+                    uploadBtn.disabled = false;
+                } else {
+                    alert('Please select a valid CSV file.');
+                    fileInput.value = '';
+                    fileInfo.classList.add('d-none');
+                    uploadBtn.disabled = true;
+                }
+            }
+        }
+    });
+</script>
 
 <%- include('../partials/footer') %>

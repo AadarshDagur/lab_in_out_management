@@ -6,7 +6,7 @@
         </a>
 
         <div class="sidebar-user">
-            <div class="sidebar-user-head">
+            <a href="/profile" class="sidebar-user-head text-decoration-none text-white">
                 <div class="user-avatar-preview">
                     <% if (currentUser.profile_image) { %>
                         <img src="<%= currentUser.profile_image %>" alt="<%= currentUser.name %>">
@@ -24,7 +24,7 @@
                         <%= currentUser.email %>
                     </span>
                 </div>
-            </div>
+            </a>
             <span class="role-pill">
                 <%= currentUser.role %>
             </span>
@@ -58,8 +58,8 @@
                             <i class="bi bi-people-fill"></i>
                             <span>Student Directory</span>
                         </a>
-                        <a class="nav-link <%= currentPath === '/dashboard' && activeSection === 'statistics' ? 'active' : '' %>"
-                            href="/dashboard?section=statistics">
+                        <a class="nav-link <%= currentPath === '/statistics' ? 'active' : '' %>"
+                            href="/statistics">
                             <i class="bi bi-graph-up"></i>
                             <span>Statistics</span>
                         </a>
@@ -83,10 +83,15 @@
                                             <i class="bi bi-sliders"></i>
                                             <span>Manage Labs</span>
                                         </a>
-                                        <a class="nav-link <%= currentPath === '/users' || currentPath.startsWith('/users/') ? 'active' : '' %>"
+                                        <a class="nav-link <%= currentPath === '/users' ? 'active' : '' %>"
                                             href="/users">
                                             <i class="bi bi-people-fill"></i>
                                             <span>Manage Users</span>
+                                        </a>
+                                        <a class="nav-link <%= currentPath === '/statistics' ? 'active' : '' %>"
+                                            href="/statistics">
+                                            <i class="bi bi-graph-up"></i>
+                                            <span>Statistics</span>
                                         </a>
                                         <a class="nav-link <%= currentPath === '/admin/settings' ? 'active' : '' %>"
                                             href="/admin/settings">

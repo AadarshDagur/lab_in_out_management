@@ -1,0 +1,321 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Analytics</p>
+            <h2 class="mb-1">Lab Statistics & Export</h2>
+            <p class="muted-copy mb-0">Comprehensive overview of current and historical lab usage</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <select class="form-select bg-white" id="periodSelector" style="width: auto; min-width: 140px; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+                <option value="today" <%= period === 'today' ? 'selected' : '' %>>TODAY</option>
+                <option value="week" <%= period === 'week' ? 'selected' : '' %>>THIS WEEK</option>
+                <option value="month" <%= period === 'month' ? 'selected' : '' %>>THIS MONTH</option>
+            </select>
+            <button class="btn btn-outline-primary" id="exportStatsBtn" style="white-space: nowrap;">
+                <i class="bi bi-cloud-arrow-down-fill me-1"></i> Export CSV
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- Lab Utilization Chart -->
+<section class="list-card p-4 mb-4">
+    <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0">Lab Utilization</h4>
+        <div class="chart-toggle-group">
+            <button class="chart-toggle-btn active" data-chart="donut" title="Donut Chart">
+                <i class="bi bi-pie-chart-fill"></i>
+            </button>
+            <button class="chart-toggle-btn" data-chart="bar" title="Bar Chart">
+                <i class="bi bi-bar-chart-fill"></i>
+            </button>
+        </div>
+    </div>
+    <div class="chart-container" style="position: relative; height: 320px; max-width: 600px; margin: 0 auto;">
+        <canvas id="labUtilizationChart"></canvas>
+    </div>
+    <div class="chart-legend-custom mt-3 d-flex justify-content-center flex-wrap gap-3" id="labUtilizationLegend"></div>
+</section>
+
+<!-- Historical Overfilling Stats -->
+<section class="list-card p-4 mb-4">
+    <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0">Historical Overfilling Incidents</h4>
+        <span class="badge bg-secondary">
+            <%= period === 'today' ? 'Today' : period === 'week' ? 'Past 7 Days' : 'Past 30 Days' %>
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table app-table mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Lab Name</th>
+                    <th class="text-center">Capacity Limit</th>
+                    <th class="text-center">Overfill Incidents</th>
+                    <th class="text-center">Severity</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (overfillStats && overfillStats.length > 0) { %>
+                    <% overfillStats.forEach(stat => { %>
+                        <tr>
+                            <td class="fw-bold"><%= stat.lab_name %></td>
+                            <td class="text-center text-muted"><%= stat.capacity %> students</td>
+                            <td class="text-center">
+                                <span class="badge <%= stat.overfill_incidents > 0 ? 'bg-danger' : 'bg-success' %> rounded-pill fs-6 px-3">
+                                    <%= stat.overfill_incidents %>
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                <% if (stat.overfill_incidents > 10) { %>
+                                    <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>High</span>
+                                <% } else if (stat.overfill_incidents > 0) { %>
+                                    <span class="text-warning fw-bold"><i class="bi bi-exclamation-circle-fill me-1"></i>Moderate</span>
+                                <% } else { %>
+                                    <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Optimal</span>
+                                <% } %>
+                            </td>
+                        </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">
+                            <i class="bi bi-shield-check display-6 d-block mb-2 text-success"></i>
+                            No overfilling incidents recorded in this period.
+                        </td>
+                    </tr>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Batch Utilization Chart -->
+<section class="list-card p-4 mb-4">
+    <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0">Batch Utilization</h4>
+        <select class="form-select form-select-sm" id="batchLabSelector" style="width: auto;">
+            <% allLabs.forEach(lab => { %>
+                <option value="<%= lab.id %>" <%= lab.id === selectedLabId ? 'selected' : '' %>><%= lab.name %></option>
+            <% }) %>
+        </select>
+    </div>
+    <div class="chart-container" style="position: relative; height: 320px; max-width: 700px; margin: 0 auto;">
+        <canvas id="batchUtilizationChart"></canvas>
+    </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const CHART_COLORS = [
+        '#3B82F6', '#93C5FD', '#BFDBFE', '#1E40AF',
+        '#60A5FA', '#2563EB', '#DBEAFE', '#1D4ED8',
+        '#6366F1', '#818CF8', '#A5B4FC', '#4F46E5'
+    ];
+
+    // ── Lab Utilization ──
+    const labCtx = document.getElementById('labUtilizationChart').getContext('2d');
+    let labChart = null;
+    let currentChartType = 'donut';
+    const labData = <%- JSON.stringify(labUtilization) %>;
+
+    function buildLabChart(data, type) {
+        if (labChart) labChart.destroy();
+
+        const labels = data.map(d => d.lab_name);
+        const values = data.map(d => parseInt(d.session_count) || 0);
+        const total = values.reduce((a, b) => a + b, 0);
+        const colors = labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+
+        // Build legend
+        const legendEl = document.getElementById('labUtilizationLegend');
+        legendEl.innerHTML = labels.map((label, i) =>
+            `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${colors[i]}"></span>${label}</span>`
+        ).join('');
+
+        if (type === 'donut') {
+            labChart = new Chart(labCtx, {
+                type: 'doughnut',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                        hoverBorderWidth: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '55%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(0) : 0;
+                                    return `${ctx.label}: ${ctx.parsed} sessions (${pct}%)`;
+                                }
+                            }
+                        },
+                        // percentage labels inside slices
+                    }
+                },
+                plugins: [{
+                    id: 'doughnutPercentages',
+                    afterDraw(chart) {
+                        const { ctx: c, chartArea } = chart;
+                        chart.data.datasets[0].data.forEach((value, i) => {
+                            if (total === 0) return;
+                            const pct = ((value / total) * 100).toFixed(0) + '%';
+                            const meta = chart.getDatasetMeta(0);
+                            const arc = meta.data[i];
+                            const { x, y } = arc.tooltipPosition();
+                            c.save();
+                            c.fillStyle = '#fff';
+                            c.font = 'bold 13px Source Sans 3, sans-serif';
+                            c.textAlign = 'center';
+                            c.textBaseline = 'middle';
+                            if (parseInt(pct) > 5) c.fillText(pct, x, y);
+                            c.restore();
+                        });
+                    }
+                }]
+            });
+        } else {
+            labChart = new Chart(labCtx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Sessions',
+                        data: values,
+                        backgroundColor: colors,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1, font: { family: 'Source Sans 3' } },
+                            grid: { color: 'rgba(0,0,0,0.06)' },
+                        },
+                        x: {
+                            ticks: { font: { family: 'Source Sans 3' } },
+                            grid: { display: false },
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    buildLabChart(labData, 'donut');
+
+    // Toggle chart type
+    document.querySelectorAll('.chart-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.chart-toggle-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentChartType = this.dataset.chart;
+            fetchLabUtilization();
+        });
+    });
+
+    // Period change
+    document.getElementById('periodSelector').addEventListener('change', function() {
+        window.location.href = '/statistics?period=' + this.value;
+    });
+
+    async function fetchLabUtilization() {
+        const period = document.getElementById('periodSelector').value;
+        try {
+            const res = await fetch(`/statistics/api/lab-utilization?period=${period}`);
+            const data = await res.json();
+            buildLabChart(data, currentChartType);
+        } catch(e) {
+            console.error('Failed to fetch lab utilization:', e);
+        }
+    }
+
+    // ── Batch Utilization ──
+    const batchCtx = document.getElementById('batchUtilizationChart').getContext('2d');
+    let batchChart = null;
+    const batchData = <%- JSON.stringify(batchUtilization) %>;
+
+    function buildBatchChart(data) {
+        if (batchChart) batchChart.destroy();
+
+        const labels = data.map(d => d.batch);
+        const values = data.map(d => parseInt(d.session_count) || 0);
+
+        batchChart = new Chart(batchCtx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Sessions',
+                    data: values,
+                    backgroundColor: CHART_COLORS.slice(0, labels.length),
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1, font: { family: 'Source Sans 3' } },
+                        grid: { color: 'rgba(0,0,0,0.06)' },
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            font: { family: 'Source Sans 3', size: 11 }
+                        },
+                        grid: { display: false },
+                    }
+                }
+            }
+        });
+    }
+
+    buildBatchChart(batchData);
+
+    document.getElementById('batchLabSelector').addEventListener('change', async function() {
+        try {
+            const res = await fetch(`/statistics/api/batch-utilization?lab_id=${this.value}`);
+            const data = await res.json();
+            buildBatchChart(data);
+        } catch(e) {
+            console.error('Failed to fetch batch utilization:', e);
+        }
+    });
+
+    const exportBtn = document.getElementById('exportStatsBtn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function() {
+            const period = document.getElementById('periodSelector').value;
+            window.location.href = `/statistics/export?period=${period}`;
+        });
+    }
+})();
+</script>
+
+<%- include('../partials/footer') %>

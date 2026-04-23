@@ -209,6 +209,100 @@ const LabSession = {
     );
     return result.rows;
   },
+
+  async getLabUtilization(period = "today") {
+    let dateFilter;
+    switch (period) {
+      case "week":
+        dateFilter = "check_in_time >= CURRENT_DATE - INTERVAL '7 days'";
+        break;
+      case "month":
+        dateFilter = "check_in_time >= CURRENT_DATE - INTERVAL '30 days'";
+        break;
+      case "today":
+      default:
+        dateFilter = "DATE(check_in_time) = CURRENT_DATE";
+        break;
+    }
+
+    const result = await db.query(`
+      SELECT l.name AS lab_name, l.id AS lab_id,
+             COUNT(ls.id)::int AS session_count
+      FROM labs l
+      LEFT JOIN lab_sessions ls ON l.id = ls.lab_id AND ${dateFilter}
+      WHERE l.is_active = TRUE
+      GROUP BY l.id, l.name
+      ORDER BY session_count DESC
+    `);
+    return result.rows;
+  },
+
+  async getBatchUtilization(labId) {
+    const result = await db.query(`
+      SELECT
+        CASE
+          WHEN u.enrollment_no ~ '^[0-9]{4}' THEN
+            SUBSTRING(u.enrollment_no FROM 1 FOR 4) || ' ' ||
+            UPPER(REGEXP_REPLACE(SUBSTRING(u.enrollment_no FROM 5), '[0-9]+$', ''))
+          ELSE COALESCE(u.department, 'Unknown')
+        END AS batch,
+        COUNT(ls.id)::int AS session_count
+      FROM lab_sessions ls
+      JOIN users u ON ls.user_id = u.id
+      WHERE ls.lab_id = $1
+        AND ls.check_in_time >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY batch
+      ORDER BY session_count DESC
+    `, [labId]);
+    return result.rows;
+  },
+
+  async getHistoricalOverfillStats(period = "today") {
+    let dateFilter;
+    switch (period) {
+      case "week":
+        dateFilter = "s1.check_in_time >= CURRENT_DATE - INTERVAL '7 days'";
+        break;
+      case "month":
+        dateFilter = "s1.check_in_time >= CURRENT_DATE - INTERVAL '30 days'";
+        break;
+      case "today":
+      default:
+        dateFilter = "DATE(s1.check_in_time) = CURRENT_DATE";
+        break;
+    }
+
+    const result = await db.query(`
+      WITH RecentSessions AS (
+        SELECT s1.id AS session_id, s1.lab_id, s1.check_in_time
+        FROM lab_sessions s1
+        WHERE ${dateFilter}
+      ),
+      CheckInCounts AS (
+        SELECT
+          r.lab_id,
+          r.session_id,
+          (
+            SELECT COUNT(*)
+            FROM lab_sessions s2
+            WHERE s2.lab_id = r.lab_id
+              AND s2.check_in_time < r.check_in_time
+              AND (s2.check_out_time IS NULL OR s2.check_out_time > r.check_in_time)
+          ) AS active_at_checkin
+        FROM RecentSessions r
+      )
+      SELECT
+        l.name AS lab_name,
+        l.capacity,
+        COUNT(c.session_id)::int AS overfill_incidents
+      FROM labs l
+      LEFT JOIN CheckInCounts c ON l.id = c.lab_id AND c.active_at_checkin >= l.capacity
+      WHERE l.is_active = TRUE
+      GROUP BY l.id, l.name, l.capacity
+      ORDER BY overfill_incidents DESC;
+    `);
+    return result.rows;
+  }
 };
 
 module.exports = LabSession;

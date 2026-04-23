@@ -4,9 +4,14 @@ const { body } = require("express-validator");
 const userController = require("../controllers/userController");
 const { isAuthenticated, authorizeRoles } = require("../middleware/auth");
 const { userProfileUpload } = require("../middleware/upload");
+const { csvUpload } = require("../middleware/csvUpload");
 
 // All routes require admin
 router.use(isAuthenticated, authorizeRoles("admin"));
+
+// Bulk upload routes (must be before /:id routes)
+router.post("/bulk-upload", csvUpload.single("csv_file"), userController.bulkUpload);
+router.get("/bulk-upload/template", userController.downloadTemplate);
 
 // GET /users - list all users
 router.get("/", userController.index);

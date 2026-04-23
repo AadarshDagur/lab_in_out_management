@@ -16,6 +16,8 @@ const labRoutes = require("./routes/labRoutes");
 const sessionRoutes = require("./routes/sessionRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const statisticsRoutes = require("./routes/statisticsRoutes");
+const profileRoutes = require("./routes/profileRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -227,6 +229,12 @@ app.use("/users", userRoutes);
 
 // Admin routes (settings)
 app.use("/admin", adminRoutes);
+
+// Statistics routes (admin + assistant)
+app.use("/statistics", statisticsRoutes);
+
+// Profile routes (all authenticated users)
+app.use("/profile", profileRoutes);
 
 // API endpoints (for AJAX)
 app.get("/api/lab-occupancy/:labId", isAuthenticated, disallowRoles("admin"), async (req, res) => {

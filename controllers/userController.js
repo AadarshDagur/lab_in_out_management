@@ -2,6 +2,36 @@ const User = require("../models/userModel");
 const { validationResult } = require("express-validator");
 const { saveProfileImage, deleteProfileImage } = require("../services/storageService");
 
+function parseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        result.push(current);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
 const userController = {
   // GET /users - List all users
   async index(req, res) {
@@ -10,11 +40,15 @@ const userController = {
       const assistants = await User.findAll("assistant");
       const admins = await User.findAll("admin");
 
+      const bulkResults = req.session?.bulkResults || null;
+      delete req.session?.bulkResults;
+
       res.render("users/index", {
         title: "Manage Users",
         students,
         assistants,
         admins,
+        bulkResults,
       });
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -91,7 +125,7 @@ const userController = {
   async update(req, res) {
     let uploadedProfileImage = null;
     try {
-      const { name, email, department, phone, is_active, remove_profile_image } = req.body;
+      const { name, email, department, phone, is_active, remove_profile_image, enrollment_no } = req.body;
       const existingUser = await User.findById(req.params.id);
       if (!existingUser) {
         req.flash("error", "User not found");
@@ -116,6 +150,7 @@ const userController = {
         is_active: nextIsActive,
         profile_image: uploadedProfileImage,
         clear_profile_image: remove_profile_image === "true",
+        enrollment_no,
       });
 
       if (uploadedProfileImage && existingUser?.profile_image && existingUser.profile_image !== uploadedProfileImage) {
@@ -142,7 +177,14 @@ const userController = {
       if (uploadedProfileImage) {
         await deleteProfileImage(uploadedProfileImage);
       }
-      req.flash("error", "Failed to update user");
+      
+      if (err.code === "23505" && err.constraint === "users_enrollment_no_key") {
+        req.flash("error", "Failed to update: That Enrollment/Staff ID is already in use by another user.");
+      } else if (err.code === "23505" && err.constraint === "users_email_key") {
+        req.flash("error", "Failed to update: That email is already in use.");
+      } else {
+        req.flash("error", "Failed to update user");
+      }
       res.redirect("/users");
     }
   },
@@ -218,6 +260,82 @@ const userController = {
       req.flash("error", "Failed to reactivate user");
       return res.redirect("/users");
     }
+  },
+
+  // POST /users/bulk-upload — process CSV
+  async bulkUpload(req, res) {
+    try {
+      if (!req.file) {
+        req.flash("error", "Please select a CSV file to upload");
+        return res.redirect("/users");
+      }
+
+      const csvContent = req.file.buffer.toString("utf-8");
+      const lines = csvContent.split(/\r?\n/).filter((line) => line.trim());
+
+      if (lines.length < 2) {
+        req.flash("error", "CSV file must have a header row and at least one data row");
+        return res.redirect("/users");
+      }
+
+      // Parse header
+      const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""));
+      const requiredCols = ["name", "email", "password", "role", "enrollment_no"];
+      const missingCols = requiredCols.filter((c) => !header.includes(c));
+      if (missingCols.length > 0) {
+        req.flash("error", `CSV is missing required columns: ${missingCols.join(", ")}`);
+        return res.redirect("/users");
+      }
+
+      // Parse rows
+      const users = [];
+      let skipped = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length === 0 || values.every((v) => !v.trim())) {
+          skipped++;
+          continue;
+        }
+
+        const row = {};
+        header.forEach((col, idx) => {
+          row[col] = values[idx] ? values[idx].trim().replace(/^["']|["']$/g, "") : "";
+        });
+        
+        // Ensure role is valid
+        if (!["admin", "assistant", "student"].includes(row.role.toLowerCase())) {
+          row.role = "student"; // Default to student if invalid
+        } else {
+          row.role = row.role.toLowerCase();
+        }
+        
+        users.push(row);
+      }
+
+      if (users.length === 0) {
+        req.flash("error", "No valid data rows found in CSV");
+        return res.redirect("/users");
+      }
+
+      const results = await User.bulkCreate(users);
+      results.skipped = skipped;
+
+      req.session.bulkResults = results;
+      req.flash("success", `Processed CSV file. Total processed: ${users.length}`);
+      res.redirect("/users");
+    } catch (err) {
+      console.error("Bulk upload error:", err);
+      req.flash("error", "Failed to process CSV file");
+      res.redirect("/users");
+    }
+  },
+
+  // GET /users/bulk-upload/template — download CSV template
+  downloadTemplate(req, res) {
+    const template = "name,email,password,role,enrollment_no,department,phone\nJohn Doe,john@iitrpr.ac.in,Pass@123,student,2023CSB1001,Computer Science,9876543210\nJane Smith,jane@iitrpr.ac.in,Pass@456,student,2023EEB1002,Electronics,9876543211\n";
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=users_template.csv");
+    res.send(template);
   },
 
   // DELETE /users/:id - Delete user

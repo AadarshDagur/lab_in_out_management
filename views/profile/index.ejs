@@ -1,0 +1,247 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2"><%= currentUser.role %> Profile</p>
+            <h2 class="mb-0">My Profile</h2>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4">
+    <!-- Profile Card -->
+    <div class="col-lg-4">
+        <section class="list-card p-4 text-center">
+            <form action="/profile?_method=PUT" method="POST" enctype="multipart/form-data" class="image-upload-form" id="profileImageForm">
+                <div class="profile-avatar-wrapper mx-auto mb-3">
+                    <div class="user-avatar-preview user-avatar-preview-xl">
+                        <% if (profileUser.profile_image) { %>
+                            <img src="<%= profileUser.profile_image %>" alt="<%= profileUser.name %>" class="image-preview">
+                            <span class="d-none"><%= (profileUser.name || 'U').trim().charAt(0).toUpperCase() %></span>
+                        <% } else { %>
+                            <span><%= (profileUser.name || 'U').trim().charAt(0).toUpperCase() %></span>
+                            <img src="" alt="Profile preview" class="image-preview d-none">
+                        <% } %>
+                    </div>
+                    <label class="profile-avatar-edit" for="profileImageInput" title="Change photo">
+                        <i class="bi bi-camera-fill"></i>
+                    </label>
+                </div>
+                <input type="file" name="profile_image" id="profileImageInput" class="d-none image-upload-input"
+                       accept="image/png,image/jpeg,image/webp,image/gif">
+
+                <h3 class="mb-1"><%= profileUser.name %></h3>
+                <p class="muted-copy mb-2"><%= profileUser.email %></p>
+                <span class="role-pill-lg"><%= profileUser.role %></span>
+
+                <hr class="my-3">
+                <div class="profile-info-list text-start">
+                    <div class="profile-info-item">
+                        <i class="bi bi-person-badge"></i>
+                        <div>
+                            <small class="muted-copy">Enrollment / Staff ID</small>
+                            <p class="mb-0"><%= profileUser.enrollment_no || 'Not set' %></p>
+                        </div>
+                    </div>
+                    <div class="profile-info-item">
+                        <i class="bi bi-building"></i>
+                        <div>
+                            <small class="muted-copy">Department</small>
+                            <p class="mb-0"><%= profileUser.department || 'Not set' %></p>
+                        </div>
+                    </div>
+                    <div class="profile-info-item">
+                        <i class="bi bi-telephone"></i>
+                        <div>
+                            <small class="muted-copy">Phone</small>
+                            <p class="mb-0"><%= profileUser.phone || 'Not set' %></p>
+                        </div>
+                    </div>
+                    <div class="profile-info-item">
+                        <i class="bi bi-calendar3"></i>
+                        <div>
+                            <small class="muted-copy">Account Created</small>
+                            <p class="mb-0"><%= new Date(profileUser.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+                        </div>
+                    </div>
+                    <% if (profileUser.role === 'student') { %>
+                    <div class="profile-info-item">
+                        <i class="bi bi-shield-exclamation"></i>
+                        <div>
+                            <small class="muted-copy">Violations</small>
+                            <p class="mb-0"><span class="soft-badge <%= profileUser.violation_count > 0 ? 'red' : 'teal' %>"><%= profileUser.violation_count || 0 %></span></p>
+                        </div>
+                    </div>
+                    <% } %>
+                </div>
+
+                <!-- Profile image actions visible to all -->
+                <div class="mt-3 d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm d-none" id="saveImageBtn">
+                        <i class="bi bi-check-lg me-1"></i>Save New Photo
+                    </button>
+                    <% if (profileUser.profile_image) { %>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input remove-image-checkbox" type="checkbox" name="remove_profile_image" value="true" id="removeProfileImg">
+                            <label class="form-check-label muted-copy" for="removeProfileImg">Remove current photo</label>
+                        </div>
+                        <button type="submit" class="btn btn-outline-danger btn-sm d-none" id="removeImageBtn">
+                            <i class="bi bi-trash me-1"></i>Confirm Remove
+                        </button>
+                    <% } %>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <!-- Edit Profile -->
+    <div class="col-lg-8">
+        <% if (currentUser.role !== 'student') { %>
+        <section class="list-card p-4 mb-4">
+            <h4 class="mb-3"><i class="bi bi-pencil-square me-2"></i>Edit Profile</h4>
+            <form action="/profile?_method=PUT" method="POST" enctype="multipart/form-data">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-control" name="name" value="<%= profileUser.name %>"
+                            <%= currentUser.role !== 'admin' ? 'disabled' : '' %>>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" value="<%= profileUser.email %>"
+                            <%= currentUser.role !== 'admin' ? 'disabled' : '' %>>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Department</label>
+                        <select class="form-select" name="department" <%= currentUser.role !== 'admin' ? 'disabled' : '' %>>
+                            <option value="Computer Science" <%= profileUser.department === 'Computer Science' ? 'selected' : '' %>>Computer Science</option>
+                            <option value="Information Technology" <%= profileUser.department === 'Information Technology' ? 'selected' : '' %>>Information Technology</option>
+                            <option value="Electronics" <%= profileUser.department === 'Electronics' ? 'selected' : '' %>>Electronics</option>
+                            <option value="Electrical" <%= profileUser.department === 'Electrical' ? 'selected' : '' %>>Electrical</option>
+                            <option value="Mechanical" <%= profileUser.department === 'Mechanical' ? 'selected' : '' %>>Mechanical</option>
+                            <option value="Civil" <%= profileUser.department === 'Civil' ? 'selected' : '' %>>Civil</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone" value="<%= profileUser.phone || '' %>"
+                            <%= currentUser.role === 'student' ? 'disabled' : '' %>>
+                    </div>
+                    <% if (currentUser.role === 'admin') { %>
+                    <div class="col-12"><hr></div>
+                    <div class="col-md-6">
+                        <label class="form-label">New Password <small class="muted-copy">(leave blank to keep current)</small></label>
+                        <input type="password" class="form-control" name="new_password" placeholder="Min 6 characters" minlength="6">
+                    </div>
+                    <% } %>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-2"></i>Save Changes
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+        <% } else { %>
+        <section class="list-card p-4 mb-4">
+            <h4 class="mb-3"><i class="bi bi-info-circle me-2"></i>Account Information</h4>
+            <p class="muted-copy mb-3">Your profile information is managed by the admin. You can only change your profile photo.</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-control" value="<%= profileUser.name %>" disabled>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" value="<%= profileUser.email %>" disabled>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Enrollment No</label>
+                    <input type="text" class="form-control" value="<%= profileUser.enrollment_no || 'Not set' %>" disabled>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Department</label>
+                    <input type="text" class="form-control" value="<%= profileUser.department || 'Not set' %>" disabled>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Phone</label>
+                    <input type="text" class="form-control" value="<%= profileUser.phone || 'Not set' %>" disabled>
+                </div>
+            </div>
+        </section>
+        <% } %>
+
+        <% if (currentUser.role === 'student') { %>
+            <!-- Recent Activity -->
+            <section class="list-card p-4">
+                <h4 class="mb-3"><i class="bi bi-clock-history me-2"></i>Recent Lab Activity</h4>
+                <% if (recentSessions.length === 0) { %>
+                    <p class="muted-copy mb-0">No lab sessions recorded yet.</p>
+                <% } else { %>
+                    <div class="table-responsive">
+                        <table class="table app-table">
+                            <thead>
+                                <tr>
+                                    <th>Lab</th>
+                                    <th>Check In</th>
+                                    <th>Check Out</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% recentSessions.forEach(session => { %>
+                                    <tr>
+                                        <td><%= session.lab_name %></td>
+                                        <td><%= new Date(session.check_in_time).toLocaleString() %></td>
+                                        <td><%= session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-' %></td>
+                                        <td><%= session.duration_minutes ? Math.round(session.duration_minutes) + ' min' : '-' %></td>
+                                        <td><span class="soft-badge <%= session.status === 'active' ? 'teal' : 'ink' %>"><%= session.status %></span></td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                <% } %>
+            </section>
+        <% } %>
+    </div>
+</div>
+
+<script>
+(function() {
+    const imgInput = document.getElementById('profileImageInput');
+    const saveBtn = document.getElementById('saveImageBtn');
+    const removeChk = document.getElementById('removeProfileImg');
+    const removeBtn = document.getElementById('removeImageBtn');
+
+    if (imgInput) {
+        imgInput.addEventListener('change', function() {
+            if (this.files.length) {
+                if (saveBtn) saveBtn.classList.remove('d-none');
+                // Show preview
+                const preview = this.closest('form').querySelector('.image-preview');
+                const placeholder = this.closest('form').querySelector('.user-avatar-preview-xl > span:not(.d-none)');
+                if (preview && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        preview.src = e.target.result;
+                        preview.classList.remove('d-none');
+                        if (placeholder) placeholder.classList.add('d-none');
+                    };
+                    reader.readAsDataURL(this.files[0]);
+                }
+            }
+        });
+    }
+
+    if (removeChk && removeBtn) {
+        removeChk.addEventListener('change', function() {
+            removeBtn.classList.toggle('d-none', !this.checked);
+        });
+    }
+})();
+</script>
+
+<%- include('../partials/footer') %>
