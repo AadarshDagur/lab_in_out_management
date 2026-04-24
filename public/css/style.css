@@ -360,7 +360,7 @@ main {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 252, 0.96));
   position: relative;
-  overflow: hidden;
+  /* overflow: hidden; Removed so dropdowns can overflow */
 }
 
 .hero-panel::after {
@@ -369,6 +369,8 @@ main {
   inset: 0 auto 0 0;
   width: 4px;
   background: linear-gradient(180deg, var(--brand), #7ea0cb);
+  border-top-left-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-lg);
 }
 
 .app-card {
