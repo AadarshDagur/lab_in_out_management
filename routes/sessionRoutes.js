@@ -58,11 +58,11 @@ router.get(
   sessionController.labHistory
 );
 
-// POST /sessions/remove-violation/:id - assistant removes a violation
+// POST /sessions/remove-violation/:id - assistant/admin removes a violation
 router.post(
   "/remove-violation/:id",
   isAuthenticated,
-  authorizeRoles("assistant"),
+  authorizeRoles("assistant", "admin"),
   sessionController.removeViolation
 );
 

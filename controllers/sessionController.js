@@ -54,7 +54,7 @@ const sessionController = {
     } catch (error) {
       console.error("Manual check-in error:", error);
       req.flash("error", "Failed to check in");
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     }
   },
 
@@ -99,16 +99,16 @@ const sessionController = {
       const activeSession = await LabSession.getActiveSession(req.params.userId);
       if (!activeSession) {
         req.flash("error", "No active session found for this student");
-        return res.redirect("back");
+        return res.redirect(req.get("Referrer") || "/");
       }
 
       await LabSession.checkOut(activeSession.id, req.session.user.id);
       req.flash("success", "Student checked out successfully");
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     } catch (error) {
       console.error("Assistant check-out error:", error);
       req.flash("error", "Failed to check out student");
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     }
   },
 
@@ -162,7 +162,7 @@ const sessionController = {
 
       if ((!identifier && !user_id) || !lab_id) {
         req.flash("error", "Student and lab are required");
-        return res.redirect("back");
+        return res.redirect(req.get("Referrer") || "/");
       }
 
       let student = null;
@@ -178,13 +178,13 @@ const sessionController = {
 
       if (!student) {
         req.flash("error", "Student not found");
-        return res.redirect("back");
+        return res.redirect(req.get("Referrer") || "/");
       }
 
       const lab = await Lab.findById(lab_id);
       if (!lab) {
         req.flash("error", "Lab not found");
-        return res.redirect("back");
+        return res.redirect(req.get("Referrer") || "/");
       }
 
       const caseType = ["missing_entry", "false_entry"].includes(case_type)
@@ -196,7 +196,7 @@ const sessionController = {
       if (caseType === "missing_entry") {
         if (activeSession && Number(activeSession.lab_id) === Number(lab.id)) {
           req.flash("error", `${student.name} is already checked in for ${lab.name}`);
-          return res.redirect("back");
+          return res.redirect(req.get("Referrer") || "/");
         }
 
         if (activeSession && Number(activeSession.lab_id) !== Number(lab.id)) {
@@ -204,14 +204,14 @@ const sessionController = {
             "error",
             `${student.name} is already checked in at ${activeSession.lab_name}. Check out that session first.`
           );
-          return res.redirect("back");
+          return res.redirect(req.get("Referrer") || "/");
         }
       }
 
       if (caseType === "false_entry") {
         if (!activeSession) {
           req.flash("error", `${student.name} does not have an active entry to check out`);
-          return res.redirect("back");
+          return res.redirect(req.get("Referrer") || "/");
         }
 
         if (Number(activeSession.lab_id) !== Number(lab.id)) {
@@ -219,7 +219,7 @@ const sessionController = {
             "error",
             `${student.name} is active in ${activeSession.lab_name}, not ${lab.name}`
           );
-          return res.redirect("back");
+          return res.redirect(req.get("Referrer") || "/");
         }
       }
 
@@ -265,11 +265,11 @@ const sessionController = {
           ? `${updatedStudent.name} marked with a violation and checked in. Total count: ${updatedStudent.violation_count}.${suspensionMsg}`
           : `${updatedStudent.name} marked with a violation and checked out. Total count: ${updatedStudent.violation_count}.${suspensionMsg}`
       );
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     } catch (error) {
       console.error("Violation marking error:", error);
       req.flash("error", "Unable to mark violation");
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     }
   },
 
@@ -280,18 +280,28 @@ const sessionController = {
 
       if (!updatedStudent) {
         req.flash("error", "Violation not found");
-        return res.redirect("back");
+        return res.redirect(req.get("Referrer") || "/");
+      }
+
+      // Check if we should unsuspend the student
+      const student = await User.findById(updatedStudent.id);
+      const limit = await Settings.getViolationLimit();
+      let restoredMsg = "";
+
+      if (student && student.violation_count < limit && (!student.is_active || student.suspended_until)) {
+        await User.liftSuspension(student.id);
+        restoredMsg = " Their suspension has been lifted.";
       }
 
       req.flash(
         "success",
-        `Violation removed for ${updatedStudent.name}. New count: ${updatedStudent.violation_count}`
+        `Violation removed for ${updatedStudent.name}. New count: ${updatedStudent.violation_count}.${restoredMsg}`
       );
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     } catch (error) {
       console.error("Remove violation error:", error);
       req.flash("error", "Failed to remove violation");
-      return res.redirect("back");
+      return res.redirect(req.get("Referrer") || "/");
     }
   },
 

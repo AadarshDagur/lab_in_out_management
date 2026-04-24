@@ -160,6 +160,14 @@ const User = {
     return result.rows[0];
   },
 
+  async liftSuspension(id) {
+    const result = await db.query(
+      `UPDATE users SET is_active = TRUE, suspended_until = NULL WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    return result.rows[0];
+  },
+
   async bulkCreate(users) {
     const created = [];
     const errors = [];
