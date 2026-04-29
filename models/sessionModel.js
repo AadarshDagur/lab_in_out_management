@@ -1,5 +1,23 @@
 const db = require("../config/db");
 
+function getLocalTimestamp(timeZone = process.env.TIMEZONE || "Asia/Kolkata") {
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  if (values.hour === "24") values.hour = "00";
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
+}
+
 const LabSession = {
   // Check in a student
   async checkIn({ user_id, lab_id, checked_in_by }) {
@@ -165,29 +183,95 @@ const LabSession = {
     return result.rows;
   },
 
-  async getGlobalStatistics(days = 30) {
+  async autoClosePastScheduledClose(nowTimestamp = getLocalTimestamp()) {
     const result = await db.query(
-      `SELECT
-         COUNT(ls.id) as total_sessions,
-         COUNT(DISTINCT ls.user_id) as total_students,
-         ROUND(SUM(ls.duration_minutes) / 60, 1) as total_hours
-       FROM lab_sessions ls
-       WHERE ls.check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
-         AND ls.status = 'completed'`
+      `WITH candidates AS (
+         SELECT ls.id,
+                l.name AS lab_name,
+                ls.check_in_time,
+                CASE
+                  WHEN l.open_time = l.close_time THEN NULL
+                  WHEN ls.check_in_time::time < l.close_time
+                    THEN ls.check_in_time::date + l.close_time
+                  ELSE ls.check_in_time::date + INTERVAL '1 day' + l.close_time
+                END AS closed_at
+         FROM lab_sessions ls
+         JOIN labs l ON ls.lab_id = l.id
+         WHERE ls.status = 'active'
+       )
+       UPDATE lab_sessions ls
+       SET check_out_time = candidates.closed_at,
+           duration_minutes = EXTRACT(EPOCH FROM (candidates.closed_at - candidates.check_in_time)) / 60,
+           status = 'auto_closed'
+       FROM candidates
+       WHERE ls.id = candidates.id
+         AND candidates.closed_at IS NOT NULL
+         AND candidates.closed_at <= $1::timestamp
+         AND candidates.closed_at > candidates.check_in_time
+       RETURNING ls.*, candidates.lab_name`,
+      [nowTimestamp]
+    );
+    return result.rows;
+  },
+
+  async getGlobalStatistics(startDate, endDate) {
+    const result = await db.query(
+      `WITH lab_days AS (
+         SELECT l.id, l.capacity, d::date AS service_date,
+                d::timestamp + l.open_time AS open_at,
+                CASE
+                  WHEN l.open_time = l.close_time THEN d::timestamp + INTERVAL '1 day'
+                  WHEN l.open_time < l.close_time THEN d::timestamp + l.close_time
+                  ELSE d::timestamp + INTERVAL '1 day' + l.close_time
+                END AS close_at
+       FROM labs l
+       CROSS JOIN generate_series($1::date, $2::date, INTERVAL '1 day') d
+     ),
+       availability AS (
+         SELECT SUM((EXTRACT(EPOCH FROM (close_at - open_at)) / 60) * capacity) AS capacity_minutes
+         FROM lab_days
+       ),
+       overlaps AS (
+         SELECT ld.id AS lab_id,
+                GREATEST(
+                  0,
+                  EXTRACT(EPOCH FROM (
+                    LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
+                    - GREATEST(ls.check_in_time, ld.open_at)
+                  )) / 60
+                ) AS occupied_minutes,
+                ls.id AS session_id,
+                ls.user_id
+         FROM lab_days ld
+         LEFT JOIN lab_sessions ls
+           ON ls.lab_id = ld.id
+          AND ls.status IN ('active', 'completed', 'auto_closed')
+          AND ls.check_in_time < ld.close_at
+          AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > ld.open_at
+       )
+       SELECT
+         COUNT(DISTINCT session_id) FILTER (WHERE session_id IS NOT NULL) AS total_sessions,
+         COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS total_students,
+         ROUND(COALESCE(SUM(occupied_minutes), 0) / 60, 1) AS total_hours,
+         ROUND(COALESCE(SUM(occupied_minutes), 0), 0) AS occupied_minutes,
+         ROUND(COALESCE((SELECT capacity_minutes FROM availability), 0), 0) AS capacity_minutes,
+         COALESCE(ROUND((SUM(occupied_minutes) / NULLIF((SELECT capacity_minutes FROM availability), 0)) * 100, 1), 0) AS utilization_percent
+       FROM overlaps`,
+      [startDate, endDate]
     );
     return result.rows[0];
   },
 
-  async getLabStatistics(days = 30) {
+  async getLabStatistics(startDate, endDate) {
     const result = await db.query(
       `WITH time_events AS (
            SELECT lab_id, check_in_time AS event_time, 1 AS change 
            FROM lab_sessions 
-           WHERE check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
+           WHERE check_in_time >= $1::date AND check_in_time < ($2::date + INTERVAL '1 day')
            UNION ALL
            SELECT lab_id, COALESCE(check_out_time, CURRENT_TIMESTAMP) AS event_time, -1 AS change 
            FROM lab_sessions 
-           WHERE check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
+           WHERE check_in_time >= $1::date AND check_in_time < ($2::date + INTERVAL '1 day')
        ),
        running_occupancy AS (
            SELECT lab_id, event_time, SUM(change) OVER (PARTITION BY lab_id ORDER BY event_time) AS current_occupancy
@@ -197,47 +281,129 @@ const LabSession = {
            SELECT lab_id, MAX(current_occupancy) AS peak_occupancy, DATE(event_time) AS event_date
            FROM running_occupancy
            GROUP BY lab_id, DATE(event_time)
+       ),
+       utilization AS (
+         SELECT *
+         FROM (
+           WITH lab_days AS (
+             SELECT l.id, l.name, l.capacity, d::date AS service_date,
+                    d::timestamp + l.open_time AS open_at,
+                    CASE
+                      WHEN l.open_time = l.close_time THEN d::timestamp + INTERVAL '1 day'
+                      WHEN l.open_time < l.close_time THEN d::timestamp + l.close_time
+                      ELSE d::timestamp + INTERVAL '1 day' + l.close_time
+                    END AS close_at
+             FROM labs l
+             CROSS JOIN generate_series($1::date, $2::date, INTERVAL '1 day') d
+           ),
+           availability AS (
+             SELECT id AS lab_id,
+                    ROUND(SUM(EXTRACT(EPOCH FROM (close_at - open_at)) / 60), 0) AS open_minutes,
+                    ROUND(SUM((EXTRACT(EPOCH FROM (close_at - open_at)) / 60) * capacity), 0) AS capacity_minutes
+             FROM lab_days
+             GROUP BY id
+           ),
+           occupied AS (
+             SELECT ld.id AS lab_id,
+                  ROUND(COALESCE(SUM(GREATEST(
+                    0,
+                    EXTRACT(EPOCH FROM (
+                      LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
+                      - GREATEST(ls.check_in_time, ld.open_at)
+                    )) / 60
+                  )), 0), 0) AS occupied_minutes,
+                  COUNT(DISTINCT ls.id)::int AS total_sessions
+           FROM lab_days ld
+           LEFT JOIN lab_sessions ls
+             ON ls.lab_id = ld.id
+            AND ls.status IN ('active', 'completed', 'auto_closed')
+            AND ls.check_in_time < ld.close_at
+            AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > ld.open_at
+           GROUP BY ld.id
+           )
+           SELECT a.lab_id,
+                  COALESCE(o.occupied_minutes, 0) AS occupied_minutes,
+                  COALESCE(o.total_sessions, 0) AS total_sessions,
+                  a.open_minutes,
+                  a.capacity_minutes
+           FROM availability a
+           LEFT JOIN occupied o ON o.lab_id = a.lab_id
+         ) u
        )
        SELECT l.id as lab_id, l.name as lab_name, l.capacity,
               COALESCE(COUNT(dp.event_date) FILTER (WHERE dp.peak_occupancy > l.capacity), 0) AS overfill_days,
-              COALESCE(ROUND(SUM(ls.duration_minutes) / (NULLIF(COUNT(DISTINCT DATE(ls.check_in_time)), 0) * 10 * 60), 1), 0) AS avg_occupancy
+              COALESCE(u.total_sessions, 0) AS total_sessions,
+              COALESCE(u.occupied_minutes, 0) AS occupied_minutes,
+              COALESCE(u.open_minutes, 0) AS open_minutes,
+              COALESCE(ROUND(u.occupied_minutes / NULLIF(u.open_minutes, 0), 1), 0) AS avg_occupancy,
+              COALESCE(u.capacity_minutes, 0) AS capacity_minutes,
+              COALESCE(ROUND((u.occupied_minutes / NULLIF(u.capacity_minutes, 0)) * 100, 1), 0) AS utilization_percent
        FROM labs l
        LEFT JOIN daily_peaks dp ON l.id = dp.lab_id
-       LEFT JOIN lab_sessions ls ON l.id = ls.lab_id AND ls.check_in_time >= CURRENT_DATE - INTERVAL '${days} days'
-       GROUP BY l.id, l.name, l.capacity
-       ORDER BY overfill_days DESC, avg_occupancy DESC`
+       LEFT JOIN utilization u ON u.lab_id = l.id
+       GROUP BY l.id, l.name, l.capacity, u.total_sessions, u.occupied_minutes, u.open_minutes, u.capacity_minutes
+       ORDER BY utilization_percent DESC, overfill_days DESC`,
+      [startDate, endDate]
     );
     return result.rows;
   },
 
-  async getLabUtilization(period = "today") {
-    let dateFilter;
-    switch (period) {
-      case "week":
-        dateFilter = "check_in_time >= CURRENT_DATE - INTERVAL '7 days'";
-        break;
-      case "month":
-        dateFilter = "check_in_time >= CURRENT_DATE - INTERVAL '30 days'";
-        break;
-      case "today":
-      default:
-        dateFilter = "DATE(check_in_time) = CURRENT_DATE";
-        break;
-    }
-
+  async getLabUtilization(startDate, endDate) {
     const result = await db.query(`
-      SELECT l.name AS lab_name, l.id AS lab_id,
-             COUNT(ls.id)::int AS session_count
-      FROM labs l
-      LEFT JOIN lab_sessions ls ON l.id = ls.lab_id AND ${dateFilter}
-      WHERE l.is_active = TRUE
-      GROUP BY l.id, l.name
-      ORDER BY session_count DESC
-    `);
+      WITH lab_days AS (
+        SELECT l.id, l.name, l.capacity, d::date AS service_date,
+               d::timestamp + l.open_time AS open_at,
+               CASE
+                 WHEN l.open_time = l.close_time THEN d::timestamp + INTERVAL '1 day'
+                 WHEN l.open_time < l.close_time THEN d::timestamp + l.close_time
+                 ELSE d::timestamp + INTERVAL '1 day' + l.close_time
+               END AS close_at
+        FROM labs l
+        CROSS JOIN generate_series($1::date, $2::date, INTERVAL '1 day') d
+      ),
+      availability AS (
+        SELECT ld.id AS lab_id,
+               ld.name AS lab_name,
+               ld.capacity,
+               SUM(EXTRACT(EPOCH FROM (ld.close_at - ld.open_at)) / 60) AS open_minutes,
+               SUM((EXTRACT(EPOCH FROM (ld.close_at - ld.open_at)) / 60) * ld.capacity) AS capacity_minutes
+        FROM lab_days ld
+        GROUP BY ld.id, ld.name, ld.capacity
+      ),
+      occupied AS (
+        SELECT ld.id AS lab_id,
+               COALESCE(SUM(GREATEST(
+                 0,
+                 EXTRACT(EPOCH FROM (
+                   LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
+                   - GREATEST(ls.check_in_time, ld.open_at)
+                 )) / 60
+               )), 0) AS occupied_minutes,
+               COUNT(DISTINCT ls.id)::int AS total_sessions
+        FROM lab_days ld
+        LEFT JOIN lab_sessions ls
+          ON ls.lab_id = ld.id
+         AND ls.status IN ('active', 'completed', 'auto_closed')
+         AND ls.check_in_time < ld.close_at
+         AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > ld.open_at
+        GROUP BY ld.id
+      )
+      SELECT lab_id,
+             lab_name,
+             capacity,
+             COALESCE(total_sessions, 0)::int AS total_sessions,
+             ROUND(open_minutes, 0)::int AS open_minutes,
+             ROUND(capacity_minutes, 0)::int AS capacity_minutes,
+             ROUND(COALESCE(occupied_minutes, 0), 0)::int AS occupied_minutes,
+             COALESCE(ROUND((COALESCE(occupied_minutes, 0) / NULLIF(capacity_minutes, 0)) * 100, 1), 0) AS utilization_percent
+      FROM availability
+      LEFT JOIN occupied USING (lab_id)
+      ORDER BY utilization_percent DESC NULLS LAST, occupied_minutes DESC
+    `, [startDate, endDate]);
     return result.rows;
   },
 
-  async getBatchUtilization(labId) {
+  async getBatchUtilization(labId, startDate, endDate) {
     const result = await db.query(`
       SELECT
         CASE
@@ -246,37 +412,30 @@ const LabSession = {
             UPPER(REGEXP_REPLACE(SUBSTRING(u.enrollment_no FROM 5), '[0-9]+$', ''))
           ELSE COALESCE(u.department, 'Unknown')
         END AS batch,
-        COUNT(ls.id)::int AS session_count
+        ROUND(COALESCE(SUM(
+          EXTRACT(EPOCH FROM (
+            LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ($3::date + INTERVAL '1 day'))
+            - GREATEST(ls.check_in_time, $2::date)
+          )) / 60
+        ), 0), 0)::int AS session_minutes
       FROM lab_sessions ls
       JOIN users u ON ls.user_id = u.id
       WHERE ls.lab_id = $1
-        AND ls.check_in_time >= CURRENT_DATE - INTERVAL '30 days'
+        AND ls.status IN ('active', 'completed', 'auto_closed')
+        AND ls.check_in_time < ($3::date + INTERVAL '1 day')
+        AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > $2::date
       GROUP BY batch
-      ORDER BY session_count DESC
-    `, [labId]);
+      ORDER BY session_minutes DESC
+    `, [labId, startDate, endDate]);
     return result.rows;
   },
 
-  async getHistoricalOverfillStats(period = "today") {
-    let dateFilter;
-    switch (period) {
-      case "week":
-        dateFilter = "s1.check_in_time >= CURRENT_DATE - INTERVAL '7 days'";
-        break;
-      case "month":
-        dateFilter = "s1.check_in_time >= CURRENT_DATE - INTERVAL '30 days'";
-        break;
-      case "today":
-      default:
-        dateFilter = "DATE(s1.check_in_time) = CURRENT_DATE";
-        break;
-    }
-
+  async getHistoricalOverfillStats(startDate, endDate) {
     const result = await db.query(`
       WITH RecentSessions AS (
         SELECT s1.id AS session_id, s1.lab_id, s1.check_in_time
         FROM lab_sessions s1
-        WHERE ${dateFilter}
+        WHERE s1.check_in_time >= $1::date AND s1.check_in_time < ($2::date + INTERVAL '1 day')
       ),
       CheckInCounts AS (
         SELECT
@@ -297,12 +456,28 @@ const LabSession = {
         COUNT(c.session_id)::int AS overfill_incidents
       FROM labs l
       LEFT JOIN CheckInCounts c ON l.id = c.lab_id AND c.active_at_checkin >= l.capacity
-      WHERE l.is_active = TRUE
       GROUP BY l.id, l.name, l.capacity
       ORDER BY overfill_incidents DESC;
-    `);
+    `, [startDate, endDate]);
     return result.rows;
-  }
+  },
+
+  // Get visit counts per lab for a user (for most-visited ordering)
+  async getVisitCountsByUser(userId) {
+    const result = await db.query(`
+      SELECT lab_id, COUNT(*)::int AS visit_count
+      FROM (
+        SELECT lab_id
+        FROM lab_sessions
+        WHERE user_id = $1
+        ORDER BY check_in_time DESC
+        LIMIT 100
+      ) recent_visits
+      GROUP BY lab_id
+      ORDER BY visit_count DESC
+    `, [userId]);
+    return result.rows;
+  },
 };
 
 module.exports = LabSession;

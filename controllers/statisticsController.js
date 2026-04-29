@@ -1,19 +1,29 @@
 const Lab = require("../models/labModel");
 const LabSession = require("../models/sessionModel");
+const exportService = require("../services/exportService");
+const AuditLog = require("../models/auditLogModel");
 
 const statisticsController = {
+  getDates(req) {
+    const today = new Date().toISOString().split("T")[0];
+    const fromDate = req.query.from || today;
+    const toDate = req.query.to || today;
+    return { fromDate, toDate };
+  },
+
   async index(req, res) {
     try {
+      const { fromDate, toDate } = statisticsController.getDates(req);
+      
       const labs = await Lab.findAllWithOccupancy();
-      const period = req.query.period || "today";
-      const labUtilization = await LabSession.getLabUtilization(period);
-      const allLabs = await Lab.findAll(true);
+      const labUtilization = await LabSession.getLabUtilization(fromDate, toDate);
+      const allLabs = await Lab.findAll(false);
       const defaultLabId = allLabs.length > 0 ? allLabs[0].id : null;
       const batchUtilization = defaultLabId
-        ? await LabSession.getBatchUtilization(defaultLabId)
+        ? await LabSession.getBatchUtilization(defaultLabId, fromDate, toDate)
         : [];
       
-      const overfillStats = await LabSession.getHistoricalOverfillStats(period);
+      const overfillStats = await LabSession.getHistoricalOverfillStats(fromDate, toDate);
 
       res.render("statistics/index", {
         title: "Lab Utilization Statistics",
@@ -21,7 +31,8 @@ const statisticsController = {
         labUtilization,
         batchUtilization,
         overfillStats,
-        period,
+        fromDate,
+        toDate,
         selectedLabId: defaultLabId,
         allLabs,
       });
@@ -34,8 +45,8 @@ const statisticsController = {
 
   async apiLabUtilization(req, res) {
     try {
-      const period = req.query.period || "today";
-      const data = await LabSession.getLabUtilization(period);
+      const { fromDate, toDate } = statisticsController.getDates(req);
+      const data = await LabSession.getLabUtilization(fromDate, toDate);
       res.json(data);
     } catch (err) {
       console.error("Lab utilization API error:", err);
@@ -49,7 +60,8 @@ const statisticsController = {
       if (!labId) {
         return res.status(400).json({ error: "lab_id is required" });
       }
-      const data = await LabSession.getBatchUtilization(labId);
+      const { fromDate, toDate } = statisticsController.getDates(req);
+      const data = await LabSession.getBatchUtilization(labId, fromDate, toDate);
       res.json(data);
     } catch (err) {
       console.error("Batch utilization API error:", err);
@@ -59,34 +71,60 @@ const statisticsController = {
 
   async exportStatistics(req, res) {
     try {
-      const period = req.query.period || "today";
       const format = req.query.format || "csv";
+      const { fromDate, toDate } = statisticsController.getDates(req);
+      const periodLabel = `${fromDate}_to_${toDate}`;
       
       // Get Lab Utilization
-      const labUtilization = await LabSession.getLabUtilization(period);
+      const labUtilization = await LabSession.getLabUtilization(fromDate, toDate);
       
       // Get all labs for Batch Utilization
-      const allLabs = await Lab.findAll(true);
+      const allLabs = await Lab.findAll(false);
 
-      const rows = [["Section", "Period", "Lab Name", "Metric", "Group", "Value"]];
+      const headers = ["Section", "Period", "Lab Name", "Metric", "Group", "Value"];
+      const rows = [];
 
       labUtilization.forEach(row => {
         rows.push([
           "Lab Utilization",
-          period,
+          periodLabel,
+          row.lab_name,
+          "Capacity Used (%)",
+          "-",
+          row.utilization_percent || 0,
+        ]);
+        rows.push([
+          "Lab Utilization",
+          periodLabel,
           row.lab_name,
           "Total Sessions",
           "-",
-          row.session_count,
+          row.total_sessions || 0,
+        ]);
+        rows.push([
+          "Lab Utilization",
+          periodLabel,
+          row.lab_name,
+          "Occupied Minutes",
+          "-",
+          row.occupied_minutes || 0,
+        ]);
+        rows.push([
+          "Lab Utilization",
+          periodLabel,
+          row.lab_name,
+          "Available Capacity Minutes",
+          "-",
+          row.capacity_minutes || 0,
         ]);
       });
       
       // Get Historical Overfilling incidents
-      const overfillStats = await LabSession.getHistoricalOverfillStats(period);
+      const overfillStats = await LabSession.getHistoricalOverfillStats(fromDate, toDate);
       overfillStats.forEach(row => {
         rows.push([
           "Historical Overfilling",
-          period,
+          periodLabel,
           row.lab_name,
           "Capacity",
           "-",
@@ -94,7 +132,7 @@ const statisticsController = {
         ]);
         rows.push([
           "Historical Overfilling",
-          period,
+          periodLabel,
           row.lab_name,
           "Times Over Capacity",
           "-",
@@ -103,93 +141,49 @@ const statisticsController = {
       });
 
       for (const lab of allLabs) {
-        const batchData = await LabSession.getBatchUtilization(lab.id);
+        const batchData = await LabSession.getBatchUtilization(lab.id, fromDate, toDate);
         if (batchData && batchData.length > 0) {
           batchData.forEach(row => {
             rows.push([
               "Batch Utilization",
-              "last_30_days",
+              periodLabel,
               lab.name,
-              "Session Count",
+              "Session Minutes",
               row.batch,
-              row.session_count,
+              row.session_minutes,
             ]);
           });
         } else {
           rows.push([
             "Batch Utilization",
-            "last_30_days",
+            periodLabel,
             lab.name,
-            "Session Count",
+            "Session Minutes",
             "No Data",
             0,
           ]);
         }
       }
 
-      if (format === 'excel') {
-        const ExcelJS = require('exceljs');
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Statistics');
-        
-        worksheet.columns = [
-          { header: 'Section', key: 'section', width: 25 },
-          { header: 'Period', key: 'period', width: 15 },
-          { header: 'Lab Name', key: 'lab', width: 20 },
-          { header: 'Metric', key: 'metric', width: 35 },
-          { header: 'Group', key: 'group', width: 15 },
-          { header: 'Value', key: 'value', width: 15 }
-        ];
-        
-        worksheet.getRow(1).font = { bold: true };
-        
-        rows.slice(1).forEach(row => {
-           worksheet.addRow(row);
-        });
+      const filename = `statistics_${periodLabel}`;
 
-        res.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.attachment(`statistics_${period}.xlsx`);
-        await workbook.xlsx.write(res);
-        return res.end();
-      }
-
-      if (format === 'pdf') {
-        const PDFDocument = require('pdfkit-table');
-        const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
-        
-        res.header("Content-Type", "application/pdf");
-        res.attachment(`statistics_${period}.pdf`);
-        doc.pipe(res);
-        
-        doc.fontSize(18).text(`Lab Statistics Export (${period.toUpperCase()})`, { align: 'center' });
-        doc.moveDown();
-
-        const table = {
-            title: "",
-            headers: ["Section", "Period", "Lab Name", "Metric", "Group", "Value"],
-            rows: rows.slice(1).map(r => r.map(c => String(c)))
-        };
-
-        await doc.table(table, { 
-            width: 780,
-            prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10),
-            prepareRow: () => doc.font("Helvetica").fontSize(9)
-        });
-        
-        doc.end();
-        return;
-      }
-
-      // Default CSV
-      const escapeCsv = (value) => {
-        const text = value === null || value === undefined ? "" : String(value);
-        return `"${text.replace(/"/g, '""')}"`;
-      };
-      const csv = rows.map(row => row.map(escapeCsv).join(",")).join("\r\n") + "\r\n";
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "EXPORT_STATISTICS",
+        targetType: "statistics",
+        targetId: null,
+        details: `${req.session.user.activeRole || req.session.user.role} exported statistics for ${periodLabel}`,
+        ipAddress: req.ip,
+      });
       
-      res.header("Content-Type", "text/csv");
-      res.attachment(`statistics_${period}.csv`);
-      return res.send(csv);
+      if (format === 'excel') {
+        return await exportService.exportExcel(res, filename, "Statistics", headers, rows);
+      } else if (format === 'pdf') {
+        return await exportService.exportPDF(res, filename, `Lab Statistics Export (${periodLabel})`, headers, rows);
+      } else {
+        return exportService.exportCSV(res, filename, headers, rows);
+      }
 
     } catch (err) {
       console.error("Export statistics error:", err);

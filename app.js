@@ -1,5 +1,7 @@
 require("dotenv").config();
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const cookieSession = require("cookie-session");
 const flash = require("connect-flash");
 const methodOverride = require("method-override");
@@ -20,11 +22,16 @@ const statisticsRoutes = require("./routes/statisticsRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
 const shouldRunRuntimeDbSetup =
   process.env.RUN_RUNTIME_DB_SETUP === "true" ||
   (!isProduction && process.env.RUN_RUNTIME_DB_SETUP !== "false");
+
+// Make io accessible to routes/controllers
+app.set("io", io);
 
 // Vercel/other reverse proxies terminate TLS before forwarding requests to Express.
 // Trusting forwarded headers keeps secure cookies and req.protocol accurate on Vercel.
@@ -164,6 +171,93 @@ async function ensureViolationTerminology() {
   }
 }
 
+// ── New migrations for feature changes ──
+
+async function ensureDualRoleSupport() {
+  try {
+    // Relax the role CHECK constraint to allow 'student+assistant'
+    await pool.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+        ALTER TABLE users ADD CONSTRAINT users_role_check
+          CHECK (role IN ('student', 'assistant', 'admin', 'student+assistant'));
+      EXCEPTION WHEN OTHERS THEN
+        NULL;
+      END $$;
+    `);
+  } catch (error) {
+    console.error("Failed to ensure dual role support:", error.message);
+  }
+}
+
+async function ensureCanViewStatisticsColumn() {
+  try {
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_statistics BOOLEAN DEFAULT FALSE");
+  } catch (error) {
+    console.error("Failed to ensure can_view_statistics column:", error.message);
+  }
+}
+
+async function ensureViolationLockedColumn() {
+  try {
+    await pool.query("ALTER TABLE violation_logs ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT FALSE");
+  } catch (error) {
+    console.error("Failed to ensure violation locked column:", error.message);
+  }
+}
+
+async function ensureLabManualInactiveColumn() {
+  try {
+    await pool.query("ALTER TABLE labs ADD COLUMN IF NOT EXISTS manual_inactive BOOLEAN DEFAULT FALSE");
+  } catch (error) {
+    console.error("Failed to ensure lab manual inactive column:", error.message);
+  }
+}
+
+async function ensureViolationRemovalRequestsTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS violation_removal_requests (
+        id SERIAL PRIMARY KEY,
+        violation_id INT NOT NULL REFERENCES violation_logs(id) ON DELETE CASCADE,
+        requested_by INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reason TEXT,
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        reviewed_by INT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TIMESTAMP
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_violation_requests_status ON violation_removal_requests(status)`);
+  } catch (error) {
+    console.error("Failed to ensure violation removal requests table:", error.message);
+  }
+}
+
+async function ensureAuditLogsTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id) ON DELETE SET NULL,
+        user_name VARCHAR(100),
+        action VARCHAR(100) NOT NULL,
+        target_type VARCHAR(50),
+        target_id INT,
+        details TEXT,
+        ip_address VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON admin_audit_logs(created_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON admin_audit_logs(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON admin_audit_logs(action)`);
+  } catch (error) {
+    console.error("Failed to ensure audit logs table:", error.message);
+  }
+}
+
 // =========================
 // Middleware
 // =========================
@@ -197,6 +291,55 @@ app.use(
 // Flash messages
 app.use(flash());
 
+let lastScheduleReconcileAt = 0;
+let scheduleReconcilePromise = null;
+
+async function reconcileLabSchedules() {
+  const intervalMs = Number(process.env.SCHEDULE_RECONCILE_INTERVAL_MS) || 60 * 1000;
+  const now = Date.now();
+
+  if (scheduleReconcilePromise) {
+    return scheduleReconcilePromise;
+  }
+
+  if (now - lastScheduleReconcileAt < intervalMs) {
+    return { closedSessions: [], openedLabs: [], closedLabs: [] };
+  }
+
+  lastScheduleReconcileAt = now;
+  scheduleReconcilePromise = (async () => {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+
+    const closedSessions = await LabSession.autoClosePastScheduledClose();
+    const openedLabs = await Lab.autoOpenDuringHours();
+    const closedLabs = await Lab.autoCloseAfterHours();
+
+    if (closedSessions.length > 0 || openedLabs.length > 0 || closedLabs.length > 0) {
+      const broadcast = app.get("broadcastLiveUpdate");
+      if (broadcast) await broadcast();
+    }
+
+    return { closedSessions, openedLabs, closedLabs };
+  })().catch((err) => {
+    console.error("Request-time lab schedule reconciliation error:", err.message);
+    return { closedSessions: [], openedLabs: [], closedLabs: [] };
+  }).finally(() => {
+    scheduleReconcilePromise = null;
+  });
+
+  return scheduleReconcilePromise;
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await reconcileLabSchedules();
+  } catch (err) {
+    console.error("Lab schedule middleware error:", err.message);
+  }
+  next();
+});
+
 // Set locals (user data + flash messages available in all views)
 app.use(setLocals);
 
@@ -207,7 +350,8 @@ app.use(setLocals);
 // Home page
 app.get("/", (req, res) => {
   if (req.session.user) {
-    return res.redirect(req.session.user.role === "admin" ? "/labs/manage" : "/dashboard");
+    const activeRole = req.session.user.activeRole || req.session.user.role;
+    return res.redirect(activeRole === "admin" ? "/labs/manage" : "/dashboard");
   }
   res.render("home", { title: "Home" });
 });
@@ -227,10 +371,10 @@ app.use("/sessions", sessionRoutes);
 // User management routes (admin)
 app.use("/users", userRoutes);
 
-// Admin routes (settings)
+// Admin routes (settings, logs, violation requests, directory)
 app.use("/admin", adminRoutes);
 
-// Statistics routes (admin + assistant)
+// Statistics routes (admin + authorized assistant)
 app.use("/statistics", statisticsRoutes);
 
 // Profile routes (all authenticated users)
@@ -246,6 +390,59 @@ app.get("/api/lab-occupancy/:labId", isAuthenticated, disallowRoles("admin"), as
     res.status(500).json({ error: "Failed to get occupancy" });
   }
 });
+
+// API: Live sessions for WebSocket fallback / initial load
+app.get("/api/live-sessions", isAuthenticated, async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+    const activeSessions = await LabSession.getAllActiveSessions();
+    const stats = await LabSession.getTodayStats();
+    const labs = await Lab.findAllWithOccupancy();
+    res.json({ activeSessions, stats, labs });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch live data" });
+  }
+});
+
+// =========================
+// WebSocket
+// =========================
+io.on("connection", (socket) => {
+  // Send initial data on connect
+  (async () => {
+    try {
+      const LabSession = require("./models/sessionModel");
+      const Lab = require("./models/labModel");
+      const activeSessions = await LabSession.getAllActiveSessions();
+      const stats = await LabSession.getTodayStats();
+      const labs = await Lab.findAllWithOccupancy();
+      socket.emit("live-update", { activeSessions, stats, labs, timestamp: new Date().toISOString() });
+    } catch (err) {
+      console.error("WebSocket initial data error:", err.message);
+    }
+  })();
+});
+
+/**
+ * Broadcast live session data to all connected clients.
+ * Call this after any check-in / check-out / violation action.
+ */
+async function broadcastLiveUpdate() {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+    const activeSessions = await LabSession.getAllActiveSessions();
+    const stats = await LabSession.getTodayStats();
+    const labs = await Lab.findAllWithOccupancy();
+    io.emit("live-update", { activeSessions, stats, labs, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error("Broadcast live update error:", err.message);
+  }
+}
+
+// Make broadcastLiveUpdate accessible
+app.set("broadcastLiveUpdate", broadcastLiveUpdate);
 
 // =========================
 // Error Handling
@@ -286,12 +483,53 @@ function ensureAppReady() {
       await ensureDatabaseCleanup();
       await ensureViolationTerminology();
       
+      // New migrations
+      await ensureDualRoleSupport();
+      await ensureCanViewStatisticsColumn();
+      await ensureViolationLockedColumn();
+      await ensureLabManualInactiveColumn();
+      await ensureViolationRemovalRequestsTable();
+      await ensureAuditLogsTable();
+      
       try {
         const LabSession = require("./models/sessionModel");
-        const closed = await LabSession.autoCloseStale(16); // close sessions older than 16 hours
+        const scheduledClosed = await LabSession.autoClosePastScheduledClose();
+        if (scheduledClosed && scheduledClosed.length > 0) {
+            console.log(`[Auto-Close] Automatically closed ${scheduledClosed.length} sessions at their scheduled lab close time.`);
+        }
+
+        const closed = await LabSession.autoCloseStale(16); // fallback for unusually stale sessions
         if (closed && closed.length > 0) {
             console.log(`[Auto-Close] Automatically closed ${closed.length} stale sessions from yesterday.`);
         }
+
+        // Setup periodic lab closing/opening
+        setInterval(async () => {
+          try {
+            const Lab = require("./models/labModel");
+            const LabSession = require("./models/sessionModel");
+            const scheduledClosed = await LabSession.autoClosePastScheduledClose();
+            if (scheduledClosed && scheduledClosed.length > 0) {
+                console.log(`[Auto-Close] Automatically closed ${scheduledClosed.length} sessions at their scheduled lab close time.`);
+                broadcastLiveUpdate();
+            }
+
+            const opened = await Lab.autoOpenDuringHours();
+            if (opened && opened.length > 0) {
+                console.log(`[Auto-Open] Automatically opened ${opened.length} labs for the day.`);
+                broadcastLiveUpdate();
+            }
+
+            const closedLabs = await Lab.autoCloseAfterHours();
+            if (closedLabs && closedLabs.length > 0) {
+                console.log(`[Auto-Close] Automatically closed ${closedLabs.length} labs and checked out all active students inside.`);
+                broadcastLiveUpdate();
+            }
+          } catch(e) {
+            console.error("Periodic lab status update error:", e);
+          }
+        }, 60000); // 1 minute checks
+
       } catch (err) {
         console.error("Failed to auto-close stale sessions:", err.message);
       }
@@ -308,12 +546,13 @@ async function startServer() {
   try {
     await ensureAppReady();
   } finally {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`
   ========================================
    Lab In/Out Management System
    Running on http://localhost:${PORT}
    Environment: ${process.env.NODE_ENV || "development"}
+   WebSocket: enabled
   ========================================
   `);
     });

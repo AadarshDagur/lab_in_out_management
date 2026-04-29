@@ -11,7 +11,7 @@
             <div class="info-strip">
                 <span class="info-chip">Occupancy <strong><%= occupancy %> / <%= lab.capacity %></strong></span>
             </div>
-            <% if (currentUser && (currentUser.role === 'assistant' || currentUser.role === 'admin')) { %>
+            <% if (currentUser && (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'admin')) { %>
                 <form action="/labs/<%= lab.id %>/status" method="POST">
                     <input type="hidden" name="is_active" value="<%= lab.is_active ? 'false' : 'true' %>">
                     <button
@@ -37,7 +37,7 @@
 
 <section class="mb-4">
     <div>
-        <% if (currentUser && !activeSession && currentUser.role === 'student' && lab.is_active) { %>
+        <% if (currentUser && !activeSession && currentUser.activeRole === 'student' && lab.is_active) { %>
             <div class="list-card p-4 mb-4">
                 <p class="section-kicker mb-1">Quick Check-In</p>
                 <h3 class="mb-3">Check in to <%= lab.name %></h3>
@@ -48,7 +48,7 @@
                     </button>
                 </form>
             </div>
-        <% } else if (currentUser && activeSession && currentUser.role === 'student') { %>
+        <% } else if (currentUser && activeSession && currentUser.activeRole === 'student') { %>
             <div class="list-card p-4 mb-4">
                 <p class="section-kicker mb-1">Active Session</p>
                 <h3 class="mb-2"><%= activeSession.lab_name %></h3>
@@ -64,7 +64,7 @@
                 <% } %>
             </div>
         <% } %>
-        <% if (currentUser && currentUser.role === 'assistant' && lab.is_active) { %>
+        <% if (currentUser && currentUser.activeRole === 'assistant' && lab.is_active) { %>
             <div class="list-card p-4 mb-4">
                 <p class="section-kicker mb-1">Mark Missing Entry</p>
                 <h3 class="mb-3">Mark Missing Entry</h3>
@@ -330,7 +330,7 @@
                                 <th>Student</th>
                                 <th>Check In</th>
                                 <th>Duration</th>
-                                <% if (currentUser.role === 'assistant') { %>
+                                <% if (currentUser.activeRole === 'assistant') { %>
                                     <th></th>
                                 <% } %>
                             </tr>
@@ -356,7 +356,7 @@
                                     </td>
                                     <td><%= new Date(session.check_in_time).toLocaleTimeString() %></td>
                                     <td><span class="soft-badge ink duration-pill"><%= minutes %> min</span></td>
-                                    <% if (currentUser.role === 'assistant') { %>
+                                    <% if (currentUser.activeRole === 'assistant') { %>
                                         <td>
                                             <form action="/sessions/mark-violation" method="POST">
                                                 <input type="hidden" name="case_type" value="false_entry">
@@ -377,15 +377,19 @@
     </div>
 </section>
 
-<% if (currentUser && currentUser.role === 'assistant') { %>
+<% if (currentUser && (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'admin')) { %>
 <section class="list-card p-4">
     <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
         <div>
             <p class="section-kicker mb-1">Recent History</p>
             <h3 class="mb-0">Latest sessions in <%= lab.name %></h3>
         </div>
-        <% if (currentUser && currentUser.role === 'assistant') { %>
-            <a href="/sessions/lab/<%= lab.id %>" class="btn btn-outline-dark btn-sm">View Full History</a>
+        <% if (currentUser && (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'admin')) { %>
+            <% if (currentUser.activeRole === 'admin' || currentUser.can_view_statistics) { %>
+                <a href="/sessions/lab/<%= lab.id %>" class="btn btn-outline-dark btn-sm">View Full History</a>
+            <% } else { %>
+                <button onclick="alert('You are not authorized to view this lab\'s full history.');" class="btn btn-outline-dark btn-sm">View Full History</button>
+            <% } %>
         <% } %>
     </div>
     <% if (recentHistory.length === 0) { %>

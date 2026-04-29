@@ -1,0 +1,160 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div>
+        <p class="section-kicker mb-2">Administrator Panel</p>
+        <h2 class="mb-0">Pending Violation Requests</h2>
+        <p class="muted-copy mt-2 mb-0">Review requests from assistants to remove accidental or unjustified violations.</p>
+    </div>
+</section>
+
+<section class="list-card p-4">
+    <% if (requests.length === 0) { %>
+        <div class="text-center py-5">
+            <i class="bi bi-check-circle fs-1 text-success mb-3 d-block"></i>
+            <h4 class="text-muted">All caught up!</h4>
+            <p class="muted-copy mb-0">There are no pending requests to review.</p>
+        </div>
+    <% } else { %>
+        <div class="table-responsive">
+            <table class="table app-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Date Requested</th>
+                        <th>Student</th>
+                        <th>Violation Details</th>
+                        <th>Requested By</th>
+                        <th>Reason</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% requests.forEach(request => { %>
+                        <tr>
+                            <td class="text-nowrap"><small><%= new Date(request.created_at).toLocaleString() %></small></td>
+                            <td>
+                                <strong><%= request.student_name %></strong><br>
+                                <span class="muted-copy"><%= request.enrollment_no %></span>
+                            </td>
+                            <td>
+                                <span class="badge bg-danger mb-1">Violation</span><br>
+                                <small><%= request.lab_name %></small>
+                            </td>
+                            <td><strong><%= request.requested_by_name %></strong></td>
+                            <td class="text-break" style="max-width: 300px;"><%= request.reason %></td>
+                            <td>
+                                <% if (request.status === 'pending') { %>
+                                    <div class="d-flex gap-2">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-success violation-decision-trigger"
+                                            data-action-url="/admin/violation-requests/<%= request.id %>/approve"
+                                            data-decision="approve"
+                                            data-student="<%= request.student_name %>"
+                                            data-requested-by="<%= request.requested_by_name %>"
+                                            data-lab="<%= request.lab_name %>">
+                                            Approve
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-danger violation-decision-trigger"
+                                            data-action-url="/admin/violation-requests/<%= request.id %>/reject"
+                                            data-decision="reject"
+                                            data-student="<%= request.student_name %>"
+                                            data-requested-by="<%= request.requested_by_name %>"
+                                            data-lab="<%= request.lab_name %>">
+                                            Reject
+                                        </button>
+                                    </div>
+                                <% } else { %>
+                                    <span class="badge <%= request.status === 'approved' ? 'bg-success' : 'bg-danger' %>"><%= request.status.toUpperCase() %></span>
+                                <% } %>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } %>
+</section>
+
+<div class="modal fade" id="violationDecisionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content decision-modal">
+            <div class="modal-body p-4 p-md-5">
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <div class="decision-icon" id="decisionIcon">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
+                    <div>
+                        <p class="section-kicker mb-2" id="decisionKicker">Review Action</p>
+                        <h4 class="mb-1" id="decisionTitle">Approve violation removal?</h4>
+                        <p class="muted-copy mb-0" id="decisionCopy">This will remove the violation after approval.</p>
+                    </div>
+                </div>
+
+                <div class="decision-summary mb-4">
+                    <div>
+                        <small>Student</small>
+                        <strong id="decisionStudent">-</strong>
+                    </div>
+                    <div>
+                        <small>Requested By</small>
+                        <strong id="decisionRequestedBy">-</strong>
+                    </div>
+                    <div>
+                        <small>Lab</small>
+                        <strong id="decisionLab">-</strong>
+                    </div>
+                </div>
+
+                <form action="" method="POST" id="violationDecisionForm" class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn px-4" id="decisionSubmit">Confirm</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('violationDecisionModal');
+    if (!modalEl || !window.bootstrap) return;
+
+    const modal = new bootstrap.Modal(modalEl);
+    const form = document.getElementById('violationDecisionForm');
+    const icon = document.getElementById('decisionIcon');
+    const title = document.getElementById('decisionTitle');
+    const kicker = document.getElementById('decisionKicker');
+    const copy = document.getElementById('decisionCopy');
+    const submit = document.getElementById('decisionSubmit');
+    const student = document.getElementById('decisionStudent');
+    const requestedBy = document.getElementById('decisionRequestedBy');
+    const lab = document.getElementById('decisionLab');
+
+    document.querySelectorAll('.violation-decision-trigger').forEach((button) => {
+        button.addEventListener('click', function() {
+            const isApprove = this.dataset.decision === 'approve';
+            form.action = this.dataset.actionUrl;
+            student.textContent = this.dataset.student || '-';
+            requestedBy.textContent = this.dataset.requestedBy || '-';
+            lab.textContent = this.dataset.lab || '-';
+
+            modalEl.classList.toggle('decision-modal-approve', isApprove);
+            modalEl.classList.toggle('decision-modal-reject', !isApprove);
+            icon.innerHTML = isApprove ? '<i class="bi bi-shield-check"></i>' : '<i class="bi bi-shield-x"></i>';
+            kicker.textContent = isApprove ? 'Approve Request' : 'Reject Request';
+            title.textContent = isApprove ? 'Approve removal request?' : 'Reject removal request?';
+            copy.textContent = isApprove
+                ? 'The violation will be removed and the student record will be updated.'
+                : 'The request will be closed and the violation will remain on the record.';
+            submit.textContent = isApprove ? 'Approve Request' : 'Reject Request';
+            submit.className = isApprove ? 'btn btn-success px-4' : 'btn btn-danger px-4';
+            modal.show();
+        });
+    });
+});
+</script>
+
+<%- include('../partials/footer') %>

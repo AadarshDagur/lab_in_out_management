@@ -1,4 +1,5 @@
 const User = require("../models/userModel");
+const AuditLog = require("../models/auditLogModel");
 const { validationResult } = require("express-validator");
 const { saveProfileImage, deleteProfileImage } = require("../services/storageService");
 
@@ -70,26 +71,22 @@ const userController = {
       const { name, email, password, role, enrollment_no, department, phone } = req.body;
       profileImage = await saveProfileImage(req.file);
 
-      // Ensure enrollment/staff ID is provided
       if (!enrollment_no || !enrollment_no.trim()) {
         req.flash("error", "Enrollment / Staff ID is required");
         return res.redirect("/users");
       }
 
-      // Ensure phone is provided
       if (!phone || !phone.trim()) {
         req.flash("error", "Phone number is required");
         return res.redirect("/users");
       }
 
-      // Check if email already exists
       const existingUser = await User.findByEmail(email);
       if (existingUser) {
         req.flash("error", "An account with this email already exists");
         return res.redirect("/users");
       }
 
-      // Check if enrollment/staff ID already exists
       if (enrollment_no) {
         const existingEnrollment = await User.findByEnrollment(enrollment_no);
         if (existingEnrollment) {
@@ -98,7 +95,7 @@ const userController = {
         }
       }
 
-      await User.create({
+      const createdUser = await User.create({
         name,
         email,
         password,
@@ -109,7 +106,17 @@ const userController = {
         profile_image: profileImage,
       });
 
-      req.flash("success", `${role.charAt(0).toUpperCase() + role.slice(1)} "${name}" created successfully`);
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "CREATE_USER",
+        targetType: "user",
+        targetId: createdUser.id,
+        details: `Admin added ${name} as ${role || "student"}`,
+        ipAddress: req.ip,
+      });
+
+      req.flash("success", `User "${name}" created successfully`);
       res.redirect("/users");
     } catch (err) {
       console.error("Error creating user:", err);
@@ -125,7 +132,7 @@ const userController = {
   async update(req, res) {
     let uploadedProfileImage = null;
     try {
-      const { name, email, department, phone, is_active, remove_profile_image, enrollment_no } = req.body;
+      const { name, email, department, phone, is_active, remove_profile_image, enrollment_no, can_view_statistics } = req.body;
       const existingUser = await User.findById(req.params.id);
       if (!existingUser) {
         req.flash("error", "User not found");
@@ -151,6 +158,7 @@ const userController = {
         profile_image: uploadedProfileImage,
         clear_profile_image: remove_profile_image === "true",
         enrollment_no,
+        can_view_statistics: can_view_statistics === "on", // HTML checkbox
       });
 
       if (uploadedProfileImage && existingUser?.profile_image && existingUser.profile_image !== uploadedProfileImage) {
@@ -167,8 +175,19 @@ const userController = {
           name: updatedUser.name,
           email: updatedUser.email,
           profile_image: updatedUser.profile_image || null,
+          can_view_statistics: updatedUser.can_view_statistics,
         };
       }
+
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "UPDATE_USER",
+        targetType: "user",
+        targetId: updatedUser.id,
+        details: `Updated details for ${updatedUser.name}`,
+        ipAddress: req.ip,
+      });
 
       req.flash("success", "User updated successfully");
       res.redirect("/users");
@@ -193,13 +212,12 @@ const userController = {
   async changeRole(req, res) {
     try {
       const { role } = req.body;
-      const allowedRoles = ["student", "assistant", "admin"];
+      const allowedRoles = ["student", "assistant", "admin", "student+assistant"];
       if (!allowedRoles.includes(role)) {
         req.flash("error", "Invalid role");
         return res.redirect("/users");
       }
 
-      // Prevent admin from changing their own role
       if (parseInt(req.params.id) === req.session.user.id) {
         req.flash("error", "You cannot change your own role");
         return res.redirect("/users");
@@ -224,6 +242,16 @@ const userController = {
         "UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
         [role, req.params.id]
       );
+
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "CHANGE_ROLE",
+        targetType: "user",
+        targetId: targetUser.id,
+        details: `Admin changed ${targetUser.name} (ID: ${targetUser.id}) from ${targetUser.role} to ${role}`,
+        ipAddress: req.ip,
+      });
 
       req.flash("success", "User role updated successfully");
       res.redirect("/users");
@@ -250,6 +278,17 @@ const userController = {
       }
 
       const updatedUser = await User.earlyReactivate(userId);
+
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "REACTIVATE_USER",
+        targetType: "user",
+        targetId: updatedUser.id,
+        details: `Early reactivated ${updatedUser.name} and locked their previous violations`,
+        ipAddress: req.ip,
+      });
+
       req.flash(
         "success",
         `${updatedUser.name} was reactivated and violation count was reset to 0`
@@ -278,7 +317,6 @@ const userController = {
         return res.redirect("/users");
       }
 
-      // Parse header
       const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""));
       const requiredCols = ["name", "email", "password", "role", "enrollment_no"];
       const missingCols = requiredCols.filter((c) => !header.includes(c));
@@ -287,7 +325,6 @@ const userController = {
         return res.redirect("/users");
       }
 
-      // Parse rows
       const users = [];
       let skipped = 0;
       for (let i = 1; i < lines.length; i++) {
@@ -302,9 +339,8 @@ const userController = {
           row[col] = values[idx] ? values[idx].trim().replace(/^["']|["']$/g, "") : "";
         });
         
-        // Ensure role is valid
-        if (!["admin", "assistant", "student"].includes(row.role.toLowerCase())) {
-          row.role = "student"; // Default to student if invalid
+        if (!["admin", "assistant", "student", "student+assistant"].includes(row.role.toLowerCase())) {
+          row.role = "student"; 
         } else {
           row.role = row.role.toLowerCase();
         }
@@ -320,6 +356,16 @@ const userController = {
       const results = await User.bulkCreate(users);
       results.skipped = skipped;
 
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "BULK_UPLOAD",
+        targetType: "system",
+        targetId: null,
+        details: `Admin added ${results.created.length} users by CSV import; ${results.errors.length} rows failed`,
+        ipAddress: req.ip,
+      });
+
       req.session.bulkResults = results;
       req.flash("success", `Processed CSV file. Total processed: ${users.length}`);
       res.redirect("/users");
@@ -332,7 +378,7 @@ const userController = {
 
   // GET /users/bulk-upload/template — download CSV template
   downloadTemplate(req, res) {
-    const template = "name,email,password,role,enrollment_no,department,phone\nJohn Doe,john@iitrpr.ac.in,Pass@123,student,2023CSB1001,Computer Science,9876543210\nJane Smith,jane@iitrpr.ac.in,Pass@456,student,2023EEB1002,Electronics,9876543211\n";
+    const template = "name,email,password,role,enrollment_no,department,phone\nJohn Doe,john@iitrpr.ac.in,Pass@123,student,2023CSB1001,Computer Science,9876543210\nJane Smith,jane@iitrpr.ac.in,Pass@456,student+assistant,2023EEB1002,Electronics,9876543211\n";
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=users_template.csv");
     res.send(template);
@@ -341,7 +387,6 @@ const userController = {
   // DELETE /users/:id - Delete user
   async delete(req, res) {
     try {
-      // Prevent admin from deleting themselves
       if (parseInt(req.params.id) === req.session.user.id) {
         req.flash("error", "You cannot delete your own account");
         return res.redirect("/users");
@@ -363,6 +408,17 @@ const userController = {
 
       await deleteProfileImage(targetUser.profile_image);
       await User.delete(req.params.id);
+
+      await AuditLog.log({
+        userId: req.session.user.id,
+        userName: req.session.user.name,
+        action: "DELETE_USER",
+        targetType: "user",
+        targetId: req.params.id,
+        details: `Deleted user ${targetUser.name}`,
+        ipAddress: req.ip,
+      });
+
       req.flash("success", "User deleted successfully");
       res.redirect("/users");
     } catch (err) {

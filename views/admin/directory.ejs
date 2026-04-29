@@ -1,0 +1,82 @@
+<%- include('../partials/header') %>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Administrator Panel</p>
+            <h2 class="mb-0">Student Directory</h2>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-outline-dark btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-download me-1"></i> Export Directory
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="/admin/directory/export?format=csv">Download CSV</a></li>
+                <li><a class="dropdown-item" href="/admin/directory/export?format=excel">Download Excel</a></li>
+                <li><a class="dropdown-item" href="/admin/directory/export?format=pdf">Download PDF</a></li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="list-card p-4">
+    <div class="filter-group filter-toolbar mb-3">
+        <input type="text" class="form-control" placeholder="Search student by name, enrollment, or department" data-filter-key="text">
+        <select class="form-select" data-filter-key="violation">
+            <option value="">All</option>
+            <option value="flagged">With violations</option>
+            <option value="clear">No violations</option>
+        </select>
+    </div>
+    <div class="table-responsive">
+        <table class="table app-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Enrollment</th>
+                    <th>Department</th>
+                    <th>Violations</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody class="filter-targets">
+                <% students.forEach(student => { %>
+                    <tr class="filter-item" data-filter-text="<%= `${student.name} ${student.enrollment_no || ''} ${student.department || ''} ${student.email || ''}`.toLowerCase() %>" data-filter-violation="<%= student.violation_count > 0 ? 'flagged' : 'clear' %>">
+                        <td>
+                            <div class="user-inline">
+                                <div class="user-avatar-preview user-avatar-preview-sm">
+                                    <% if (student.profile_image) { %>
+                                        <img src="<%= student.profile_image %>" alt="<%= student.name %>">
+                                    <% } else { %>
+                                        <span><%= (student.name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                    <% } %>
+                                </div>
+                                <div>
+                                    <a href="/sessions/student/<%= student.id %>" class="text-decoration-none text-dark">
+                                        <strong><%= student.name %></strong>
+                                    </a><br>
+                                    <span class="muted-copy"><%= student.email %></span>
+                                </div>
+                            </div>
+                        </td>
+                        <td><%= student.enrollment_no || '-' %></td>
+                        <td><%= student.department || '-' %></td>
+                        <td><span class="soft-badge <%= student.violation_count > 0 ? 'red' : 'ink' %>"><%= student.violation_count || 0 %></span></td>
+                        <td>
+                            <% if (student.suspended_until && new Date(student.suspended_until) > new Date()) { %>
+                                <span class="soft-badge red">Suspended</span>
+                            <% } else if (student.is_active) { %>
+                                <span class="soft-badge teal">Active</span>
+                            <% } else { %>
+                                <span class="soft-badge ink">Inactive</span>
+                            <% } %>
+                            <a href="/sessions/student/<%= student.id %>" class="btn btn-sm btn-outline-dark ms-2">View History</a>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<%- include('../partials/footer') %>

@@ -5,56 +5,118 @@
         <div>
             <p class="section-kicker mb-2">Analytics</p>
             <h2 class="mb-1">Lab Statistics & Export</h2>
-            <p class="muted-copy mb-0">Comprehensive overview of current and historical lab usage</p>
+            <p class="muted-copy mb-0">Capacity usage based on occupied minutes, not raw session count</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <div class="dropdown">
-                <% 
-                    let displayPeriod = 'TODAY';
-                    if (period === 'week') displayPeriod = 'THIS WEEK';
-                    if (period === 'month') displayPeriod = 'THIS MONTH';
-                %>
-                <button class="btn btn-outline-primary dropdown-toggle" type="button" id="periodDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false" style="min-width: 140px; white-space: nowrap;">
-                    <i class="bi bi-calendar3 me-1"></i> <%= displayPeriod %>
-                </button>
-                <ul class="dropdown-menu shadow" aria-labelledby="periodDropdownBtn">
-                    <li><a class="dropdown-item <%= period === 'today' ? 'active' : '' %>" href="/statistics?period=today">TODAY</a></li>
-                    <li><a class="dropdown-item <%= period === 'week' ? 'active' : '' %>" href="/statistics?period=week">THIS WEEK</a></li>
-                    <li><a class="dropdown-item <%= period === 'month' ? 'active' : '' %>" href="/statistics?period=month">THIS MONTH</a></li>
-                </ul>
-            </div>
-            <input type="hidden" id="periodSelector" value="<%= period %>">
             <div class="dropdown">
                 <button class="btn btn-outline-primary dropdown-toggle" type="button" id="exportBtn" data-bs-toggle="dropdown" aria-expanded="false" style="white-space: nowrap;">
                     <i class="bi bi-cloud-arrow-down-fill me-1"></i> Export As
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="exportBtn">
-                    <li><a class="dropdown-item" href="/statistics/export?period=<%= period %>&format=csv"><i class="bi bi-filetype-csv me-2 text-success"></i> CSV</a></li>
-                    <li><a class="dropdown-item" href="/statistics/export?period=<%= period %>&format=excel"><i class="bi bi-file-earmark-excel me-2 text-success"></i> Excel</a></li>
-                    <li><a class="dropdown-item" href="/statistics/export?period=<%= period %>&format=pdf"><i class="bi bi-file-earmark-pdf me-2 text-danger"></i> PDF</a></li>
+                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&format=csv"><i class="bi bi-filetype-csv me-2 text-success"></i> CSV</a></li>
+                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&format=excel"><i class="bi bi-file-earmark-excel me-2 text-success"></i> Excel</a></li>
+                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&format=pdf"><i class="bi bi-file-earmark-pdf me-2 text-danger"></i> PDF</a></li>
                 </ul>
             </div>
         </div>
     </div>
 </section>
 
-<!-- Lab Utilization Chart -->
+<!-- Date Filter Form -->
+<section class="list-card p-3 mb-4 bg-light">
+    <form class="row g-3 align-items-end" method="GET" action="/statistics">
+        <div class="col-md-4">
+            <label class="form-label text-muted small fw-bold">From Date</label>
+            <input type="date" class="form-control" name="from" id="fromDateInput" value="<%= fromDate %>">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-muted small fw-bold">To Date</label>
+            <input type="date" class="form-control" name="to" id="toDateInput" value="<%= toDate %>">
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary w-100">Apply Date Range</button>
+        </div>
+    </form>
+</section>
+
+<!-- Lab Capacity Utilization Chart -->
 <section class="list-card p-4 mb-4">
     <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0">Lab Utilization</h4>
-        <div class="chart-toggle-group">
-            <button class="chart-toggle-btn active" data-chart="donut" title="Donut Chart">
-                <i class="bi bi-pie-chart-fill"></i>
-            </button>
-            <button class="chart-toggle-btn" data-chart="bar" title="Bar Chart">
-                <i class="bi bi-bar-chart-fill"></i>
-            </button>
+        <div>
+            <h4 class="mb-1">Lab Capacity Used</h4>
+            <p class="muted-copy mb-0">Occupied minutes divided by available seat-minutes for each lab.</p>
         </div>
     </div>
-    <div class="chart-container" style="position: relative; height: 320px; max-width: 600px; margin: 0 auto;">
+    <div class="chart-container" style="position: relative; height: 320px; max-width: 760px; margin: 0 auto;">
         <canvas id="labUtilizationChart"></canvas>
     </div>
     <div class="chart-legend-custom mt-3 d-flex justify-content-center flex-wrap gap-3" id="labUtilizationLegend"></div>
+    <div class="table-responsive mt-4">
+        <table class="table app-table mb-0">
+            <thead>
+                <tr>
+                    <th>Lab</th>
+                    <th class="text-center">Capacity</th>
+                    <th class="text-center">Open Minutes</th>
+                    <th class="text-center">Occupied Minutes</th>
+                    <th class="text-center">Available Seat-Minutes</th>
+                    <th class="text-center">Used</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% labUtilization.forEach(row => { %>
+                    <tr>
+                        <td><strong><%= row.lab_name %></strong></td>
+                        <td class="text-center"><%= row.capacity %></td>
+                        <td class="text-center"><%= row.open_minutes || 0 %></td>
+                        <td class="text-center"><%= row.occupied_minutes || 0 %></td>
+                        <td class="text-center"><%= row.capacity_minutes || 0 %></td>
+                        <td class="text-center">
+                            <span class="soft-badge <%= Number(row.utilization_percent || 0) >= 75 ? 'red' : Number(row.utilization_percent || 0) >= 40 ? 'ink' : 'teal' %>">
+                                <%= row.utilization_percent || 0 %>%
+                            </span>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Lab Session Count Chart -->
+<section class="list-card p-4 mb-4">
+    <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1">Lab Session Count</h4>
+            <p class="muted-copy mb-0">Total sessions recorded for each lab in the selected date range.</p>
+        </div>
+    </div>
+    <div class="chart-container" style="position: relative; height: 320px; max-width: 760px; margin: 0 auto;">
+        <canvas id="labSessionCountChart"></canvas>
+    </div>
+    <div class="table-responsive mt-4">
+        <table class="table app-table mb-0">
+            <thead>
+                <tr>
+                    <th>Lab</th>
+                    <th class="text-center">Sessions</th>
+                    <th class="text-center">Used</th>
+                    <th class="text-center">Occupied Minutes</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% const sessionCountRows = [...labUtilization].sort((a, b) => Number(b.total_sessions || 0) - Number(a.total_sessions || 0)); %>
+                <% sessionCountRows.forEach(row => { %>
+                    <tr>
+                        <td><strong><%= row.lab_name %></strong></td>
+                        <td class="text-center"><%= row.total_sessions || 0 %></td>
+                        <td class="text-center"><%= row.utilization_percent || 0 %>%</td>
+                        <td class="text-center"><%= row.occupied_minutes || 0 %></td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <!-- Historical Overfilling Stats -->
@@ -62,7 +124,7 @@
     <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
         <h4 class="mb-0">Historical Overfilling Incidents</h4>
         <span class="badge bg-secondary">
-            <%= period === 'today' ? 'Today' : period === 'week' ? 'Past 7 Days' : 'Past 30 Days' %>
+            <%= fromDate %> to <%= toDate %>
         </span>
     </div>
     <div class="table-responsive">
@@ -110,13 +172,13 @@
     </div>
 </section>
 
-<!-- Batch Utilization Chart -->
+<!-- Batch Session Time Chart -->
 <section class="list-card p-4 mb-4">
     <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0">Batch Utilization</h4>
+        <h4 class="mb-0">Batch Session Time</h4>
         <select class="form-select form-select-sm" id="batchLabSelector" style="width: auto;">
             <% allLabs.forEach(lab => { %>
-                <option value="<%= lab.id %>" <%= lab.id === selectedLabId ? 'selected' : '' %>><%= lab.name %></option>
+                <option value="<%= lab.id %>" <%= lab.id === selectedLabId ? 'selected' : '' %>><%= lab.name %><%= lab.is_active ? '' : ' (Inactive)' %></option>
             <% }) %>
         </select>
     </div>
@@ -134,19 +196,37 @@
         '#6366F1', '#818CF8', '#A5B4FC', '#4F46E5'
     ];
 
-    // ── Lab Utilization ──
+    // Lab Utilization
     const labCtx = document.getElementById('labUtilizationChart').getContext('2d');
+    const sessionCountCtx = document.getElementById('labSessionCountChart').getContext('2d');
     let labChart = null;
-    let currentChartType = 'donut';
+    let sessionCountChart = null;
     const labData = <%- JSON.stringify(labUtilization) %>;
 
-    function buildLabChart(data, type) {
+    function getPercentAxisMax(values) {
+        const maxValue = Math.max(...values, 0);
+        if (maxValue <= 0) return 10;
+        if (maxValue <= 5) return 5;
+        if (maxValue <= 10) return 10;
+        if (maxValue <= 25) return Math.ceil(maxValue / 5) * 5;
+        return Math.min(100, Math.ceil(maxValue / 10) * 10);
+    }
+
+    function getCountAxisMax(values) {
+        const maxValue = Math.max(...values, 0);
+        if (maxValue <= 0) return 5;
+        if (maxValue <= 5) return 5;
+        if (maxValue <= 10) return 10;
+        return Math.ceil(maxValue / 5) * 5;
+    }
+
+    function buildLabChart(data) {
         if (labChart) labChart.destroy();
 
         const labels = data.map(d => d.lab_name);
-        const values = data.map(d => parseInt(d.session_count) || 0);
-        const total = values.reduce((a, b) => a + b, 0);
+        const values = data.map(d => Number(d.utilization_percent) || 0);
         const colors = labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+        const yMax = getPercentAxisMax(values);
 
         // Build legend
         const legendEl = document.getElementById('labUtilizationLegend');
@@ -154,117 +234,121 @@
             `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${colors[i]}"></span>${label}</span>`
         ).join('');
 
-        if (type === 'donut') {
-            labChart = new Chart(labCtx, {
-                type: 'doughnut',
-                data: {
-                    labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: colors,
-                        borderWidth: 2,
-                        borderColor: '#fff',
-                        hoverBorderWidth: 3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '55%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(ctx) {
-                                    const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(0) : 0;
-                                    return `${ctx.label}: ${ctx.parsed} sessions (${pct}%)`;
-                                }
-                            }
-                        },
-                        // percentage labels inside slices
-                    }
-                },
-                plugins: [{
-                    id: 'doughnutPercentages',
-                    afterDraw(chart) {
-                        const { ctx: c, chartArea } = chart;
-                        chart.data.datasets[0].data.forEach((value, i) => {
-                            if (total === 0) return;
-                            const pct = ((value / total) * 100).toFixed(0) + '%';
-                            const meta = chart.getDatasetMeta(0);
-                            const arc = meta.data[i];
-                            const { x, y } = arc.tooltipPosition();
-                            c.save();
-                            c.fillStyle = '#fff';
-                            c.font = 'bold 13px Source Sans 3, sans-serif';
-                            c.textAlign = 'center';
-                            c.textBaseline = 'middle';
-                            if (parseInt(pct) > 5) c.fillText(pct, x, y);
-                            c.restore();
-                        });
-                    }
+        labChart = new Chart(labCtx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Capacity Used (%)',
+                    data: values,
+                    backgroundColor: colors,
+                    borderRadius: 6,
+                    borderSkipped: false,
                 }]
-            });
-        } else {
-            labChart = new Chart(labCtx, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Sessions',
-                        data: values,
-                        backgroundColor: colors,
-                        borderRadius: 6,
-                        borderSkipped: false,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: { stepSize: 1, font: { family: 'Source Sans 3' } },
-                            grid: { color: 'rgba(0,0,0,0.06)' },
-                        },
-                        x: {
-                            ticks: { font: { family: 'Source Sans 3' } },
-                            grid: { display: false },
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const row = data[ctx.dataIndex];
+                                return `${ctx.parsed.y}% used (${row.occupied_minutes || 0}/${row.capacity_minutes || 0} seat-min)`;
+                            }
                         }
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: yMax,
+                        ticks: { callback: value => `${value}%`, font: { family: 'Source Sans 3' } },
+                        grid: { color: 'rgba(0,0,0,0.06)' },
+                    },
+                    x: {
+                        ticks: { font: { family: 'Source Sans 3' } },
+                        grid: { display: false },
                     }
                 }
-            });
-        }
+            }
+        });
     }
 
-    buildLabChart(labData, 'donut');
+    function buildSessionCountChart(data) {
+        if (sessionCountChart) sessionCountChart.destroy();
 
-    // Toggle chart type
-    document.querySelectorAll('.chart-toggle-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.chart-toggle-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            currentChartType = this.dataset.chart;
-            fetchLabUtilization();
+        const sortedData = [...data].sort((a, b) => (Number(b.total_sessions) || 0) - (Number(a.total_sessions) || 0));
+        const labels = sortedData.map(d => d.lab_name);
+        const values = sortedData.map(d => Number(d.total_sessions) || 0);
+        const colors = labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+        const yMax = getCountAxisMax(values);
+
+        sessionCountChart = new Chart(sessionCountCtx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Sessions',
+                    data: values,
+                    backgroundColor: colors,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const row = sortedData[ctx.dataIndex];
+                                return `${ctx.parsed.y} sessions, ${row.utilization_percent || 0}% used`;
+                            }
+                        }
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: yMax,
+                        ticks: {
+                            precision: 0,
+                            stepSize: yMax <= 10 ? 1 : undefined,
+                            font: { family: 'Source Sans 3' },
+                        },
+                        grid: { color: 'rgba(0,0,0,0.06)' },
+                    },
+                    x: {
+                        ticks: { font: { family: 'Source Sans 3' } },
+                        grid: { display: false },
+                    }
+                }
+            }
         });
-    });
+    }
+
+    buildLabChart(labData);
+    buildSessionCountChart(labData);
 
     // Fetch initialization calls
     async function fetchLabUtilization() {
-        const period = document.getElementById('periodSelector').value;
+        const from = document.getElementById('fromDateInput').value;
+        const to = document.getElementById('toDateInput').value;
         try {
-            const res = await fetch(`/statistics/api/lab-utilization?period=${period}`);
+            const res = await fetch(`/statistics/api/utilization?from=${from}&to=${to}`);
             const data = await res.json();
-            buildLabChart(data, currentChartType);
+            buildLabChart(data);
+            buildSessionCountChart(data);
         } catch(e) {
             console.error('Failed to fetch lab utilization:', e);
         }
     }
 
-    // ── Batch Utilization ──
+    // Batch Utilization
     const batchCtx = document.getElementById('batchUtilizationChart').getContext('2d');
     let batchChart = null;
     const batchData = <%- JSON.stringify(batchUtilization) %>;
@@ -273,14 +357,14 @@
         if (batchChart) batchChart.destroy();
 
         const labels = data.map(d => d.batch);
-        const values = data.map(d => parseInt(d.session_count) || 0);
+        const values = data.map(d => parseInt(d.session_minutes) || 0);
 
         batchChart = new Chart(batchCtx, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [{
-                    label: 'Sessions',
+                    label: 'Session Minutes',
                     data: values,
                     backgroundColor: CHART_COLORS.slice(0, labels.length),
                     borderRadius: 6,
@@ -294,7 +378,7 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: { stepSize: 1, font: { family: 'Source Sans 3' } },
+                        ticks: { font: { family: 'Source Sans 3' } },
                         grid: { color: 'rgba(0,0,0,0.06)' },
                     },
                     x: {
@@ -313,8 +397,10 @@
     buildBatchChart(batchData);
 
     document.getElementById('batchLabSelector').addEventListener('change', async function() {
+        const from = document.getElementById('fromDateInput').value;
+        const to = document.getElementById('toDateInput').value;
         try {
-            const res = await fetch(`/statistics/api/batch-utilization?lab_id=${this.value}`);
+            const res = await fetch(`/statistics/api/batch?lab_id=${this.value}&from=${from}&to=${to}`);
             const data = await res.json();
             buildBatchChart(data);
         } catch(e) {

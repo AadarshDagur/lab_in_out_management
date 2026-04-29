@@ -13,6 +13,7 @@ const labController = {
 
     return Lab.update(lab.id, {
       is_active: nextIsActive,
+      manual_inactive: !nextIsActive,
     });
   },
 
@@ -45,9 +46,12 @@ const labController = {
         ? await LabSession.getActiveSession(req.session.user.id)
         : null;
       let students = [];
+      const activeRole = req.session.user
+        ? (req.session.user.activeRole || req.session.user.role)
+        : null;
       if (
         req.session.user &&
-        (req.session.user.role === "assistant" || req.session.user.role === "admin")
+        (activeRole === "assistant" || activeRole === "admin")
       ) {
         const allStudents = await User.findStudentDirectory();
         const allActiveSessions = await LabSession.getAllActiveSessions();
@@ -137,6 +141,7 @@ const labController = {
         open_time,
         close_time,
         is_active: nextIsActive,
+        manual_inactive: !nextIsActive,
       });
       req.flash("success", "Lab updated successfully");
       res.redirect("/labs/manage");

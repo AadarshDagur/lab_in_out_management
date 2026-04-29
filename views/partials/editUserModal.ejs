@@ -61,10 +61,19 @@
                             <option value="false" <%= !user.is_active ? 'selected' : '' %>>Inactive</option>
                         </select>
                     </div>
+                    <% if (user.role === 'assistant' || user.role === 'student+assistant') { %>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="can_view_statistics" id="canViewStats<%= user.id %>" <%= user.can_view_statistics ? 'checked' : '' %>>
+                            <label class="form-check-label fw-bold" for="canViewStats<%= user.id %>">Can View Statistics & History</label>
+                        </div>
+                        <div class="form-text small">Allow this user to access the statistics dashboard and view global history reports.</div>
+                    </div>
+                    <% } %>
                 </div>
             </form>
             <div class="modal-footer">
-                <div class="dropdown me-auto">
+                <div class="dropup me-auto">
                     <button class="btn btn-outline-warning btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         <i class="bi bi-arrow-repeat me-1"></i>Change Role
                     </button>
@@ -82,6 +91,14 @@
                                 <input type="hidden" name="role" value="assistant">
                                 <button type="submit" class="dropdown-item <%= user.role === 'assistant' ? 'active' : '' %>">
                                     <i class="bi bi-person-badge me-1"></i>Lab Assistant
+                                </button>
+                            </form>
+                        </li>
+                        <li>
+                            <form action="/users/<%= user.id %>/role?_method=PUT" method="POST">
+                                <input type="hidden" name="role" value="student+assistant">
+                                <button type="submit" class="dropdown-item <%= user.role === 'student+assistant' ? 'active' : '' %>">
+                                    <i class="bi bi-person-lines-fill me-1"></i>Student + Assistant
                                 </button>
                             </form>
                         </li>

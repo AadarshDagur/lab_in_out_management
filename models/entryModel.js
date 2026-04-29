@@ -28,6 +28,11 @@ const Entry = {
 
     if (!violation.rows[0]) return null;
 
+    // Prevent removal of locked violations
+    if (violation.rows[0].locked) {
+      return { locked: true };
+    }
+
     const userId = violation.rows[0].user_id;
 
     await db.query(`DELETE FROM violation_logs WHERE id = $1`, [violationId]);
@@ -46,7 +51,7 @@ const Entry = {
 
   async getRecentViolations(limit = 20) {
     const result = await db.query(
-      `SELECT dl.id, dl.note, dl.created_at, dl.user_id,
+      `SELECT dl.id, dl.note, dl.created_at, dl.user_id, dl.locked,
               u.name AS user_name, u.enrollment_no, u.violation_count,
               l.name AS lab_name,
               m.name AS marked_by_name
@@ -63,7 +68,7 @@ const Entry = {
 
   async getViolationsByAssistant(assistantId, limit = 20) {
     const result = await db.query(
-      `SELECT dl.id, dl.note, dl.created_at, dl.user_id,
+      `SELECT dl.id, dl.note, dl.created_at, dl.user_id, dl.locked,
               u.name AS user_name, u.enrollment_no, u.violation_count,
               l.name AS lab_name,
               m.name AS marked_by_name
@@ -79,9 +84,26 @@ const Entry = {
     return result.rows;
   },
 
+  async getAllViolationsByAssistant(assistantId) {
+    const result = await db.query(
+      `SELECT dl.id, dl.note, dl.created_at, dl.user_id, dl.locked,
+              u.name AS user_name, u.enrollment_no, u.violation_count,
+              l.name AS lab_name,
+              m.name AS marked_by_name
+       FROM violation_logs dl
+       JOIN users u ON dl.user_id = u.id
+       JOIN labs l ON dl.lab_id = l.id
+       LEFT JOIN users m ON dl.marked_by = m.id
+       WHERE dl.marked_by = $1
+       ORDER BY dl.created_at DESC`,
+      [assistantId]
+    );
+    return result.rows;
+  },
+
   async getUserViolations(userId) {
     const result = await db.query(
-      `SELECT dl.id, dl.note, dl.created_at,
+      `SELECT dl.id, dl.note, dl.created_at, dl.locked,
               l.name AS lab_name,
               m.name AS marked_by_name
        FROM violation_logs dl
@@ -92,6 +114,18 @@ const Entry = {
       [userId]
     );
     return result.rows;
+  },
+
+  async findById(violationId) {
+    const result = await db.query(
+      `SELECT dl.*, u.name AS user_name, u.enrollment_no, l.name AS lab_name
+       FROM violation_logs dl
+       JOIN users u ON dl.user_id = u.id
+       JOIN labs l ON dl.lab_id = l.id
+       WHERE dl.id = $1`,
+      [violationId]
+    );
+    return result.rows[0];
   },
 };
 

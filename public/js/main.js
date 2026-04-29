@@ -418,6 +418,29 @@ document.addEventListener("DOMContentLoaded", () => {
     renderStudentOptions();
   });
 
+  const auditActionFilters = document.querySelectorAll(".audit-action-filter");
+  auditActionFilters.forEach((filter) => {
+    const input = filter.querySelector(".audit-action-input");
+    const label = filter.querySelector(".audit-action-label");
+    const triggerIcon = filter.querySelector(".audit-action-trigger .audit-action-icon");
+    const triggerIconGlyph = triggerIcon?.querySelector("i");
+    const options = filter.querySelectorAll(".audit-action-option");
+    if (!input || !label || !triggerIcon || !triggerIconGlyph || !options.length) return;
+
+    options.forEach((option) => {
+      option.addEventListener("click", () => {
+        input.value = option.dataset.value || "";
+        label.textContent = option.dataset.label || "All actions";
+
+        triggerIcon.className = `audit-action-icon ${option.dataset.tone || "all"}`;
+        triggerIconGlyph.className = `bi ${option.dataset.icon || "bi-stars"}`;
+
+        options.forEach((item) => item.classList.remove("active"));
+        option.classList.add("active");
+      });
+    });
+  });
+
   const filterGroups = document.querySelectorAll(".filter-group");
   filterGroups.forEach((group) => {
     const controls = group.querySelectorAll("[data-filter-key]");

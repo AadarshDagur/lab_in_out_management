@@ -1,0 +1,145 @@
+<%- include('../partials/header') %>
+<%
+const actionMeta = {
+    LOGIN: { icon: 'bi-box-arrow-in-right', tone: 'teal', label: 'Admin Login' },
+    CREATE_USER: { icon: 'bi-person-plus-fill', tone: 'blue', label: 'Create User' },
+    CHANGE_ROLE: { icon: 'bi-person-gear', tone: 'blue', label: 'Change Role' },
+    REACTIVATE_USER: { icon: 'bi-person-check-fill', tone: 'teal', label: 'Reactivate User' },
+    BULK_UPLOAD: { icon: 'bi-cloud-arrow-up-fill', tone: 'blue', label: 'Bulk Upload' },
+    DELETE_USER: { icon: 'bi-person-x-fill', tone: 'red', label: 'Delete User' },
+    MARK_VIOLATION: { icon: 'bi-shield-exclamation', tone: 'orange', label: 'Mark Violation' },
+    REQUEST_VIOLATION_REMOVAL: { icon: 'bi-envelope-paper-fill', tone: 'orange', label: 'Removal Request' },
+    REMOVE_VIOLATION: { icon: 'bi-shield-minus', tone: 'red', label: 'Remove Violation' },
+    APPROVE_REMOVAL_REQUEST: { icon: 'bi-check-circle-fill', tone: 'teal', label: 'Approve Request' },
+    REJECT_REMOVAL_REQUEST: { icon: 'bi-x-circle-fill', tone: 'red', label: 'Reject Request' },
+    EXPORT_STATISTICS: { icon: 'bi-file-earmark-bar-graph-fill', tone: 'blue', label: 'Export Statistics' },
+};
+const selectedActionMeta = filters.action ? (actionMeta[filters.action] || { icon: 'bi-lightning-charge-fill', tone: 'blue', label: filters.action }) : null;
+%>
+
+<section class="hero-panel mb-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Administrator Panel</p>
+            <h2 class="mb-0">System Audit Logs</h2>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <div class="dropdown">
+                <button class="btn btn-outline-dark btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download me-1"></i> Export Logs
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="/admin/logs/export?format=csv&<%= filterQuery %>">Download CSV</a></li>
+                    <li><a class="dropdown-item" href="/admin/logs/export?format=excel&<%= filterQuery %>">Download Excel</a></li>
+                    <li><a class="dropdown-item" href="/admin/logs/export?format=pdf&<%= filterQuery %>">Download PDF</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="list-card p-4">
+    <form class="row g-3 mb-4" method="GET" action="/admin/logs">
+        <div class="col-md-3">
+            <label class="form-label text-muted small">From Date</label>
+            <input type="date" class="form-control" name="from" value="<%= filters.from %>">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-muted small">To Date</label>
+            <input type="date" class="form-control" name="to" value="<%= filters.to %>">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-muted small">Action</label>
+            <div class="dropdown audit-action-filter">
+                <input type="hidden" name="action" value="<%= filters.action %>" class="audit-action-input">
+                <button class="btn audit-action-trigger dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="audit-action-icon <%= selectedActionMeta ? selectedActionMeta.tone : 'all' %>">
+                        <i class="bi <%= selectedActionMeta ? selectedActionMeta.icon : 'bi-stars' %>"></i>
+                    </span>
+                    <span class="audit-action-label"><%= selectedActionMeta ? selectedActionMeta.label : 'All actions' %></span>
+                </button>
+                <ul class="dropdown-menu audit-action-menu">
+                    <li>
+                        <button type="submit" class="dropdown-item audit-action-option <%= !filters.action ? 'active' : '' %>" name="action_choice" value="" data-value="" data-label="All actions" data-icon="bi-stars" data-tone="all">
+                            <span class="audit-action-icon all"><i class="bi bi-stars"></i></span>
+                            <span>All actions</span>
+                        </button>
+                    </li>
+                    <% actions.forEach(action => {
+                        const meta = actionMeta[action] || { icon: 'bi-lightning-charge-fill', tone: 'blue', label: action };
+                    %>
+                        <li>
+                            <button type="submit" class="dropdown-item audit-action-option <%= filters.action === action ? 'active' : '' %>" name="action_choice" value="<%= action %>" data-value="<%= action %>" data-label="<%= meta.label %>" data-icon="<%= meta.icon %>" data-tone="<%= meta.tone %>">
+                                <span class="audit-action-icon <%= meta.tone %>"><i class="bi <%= meta.icon %>"></i></span>
+                                <span><%= meta.label %></span>
+                            </button>
+                        </li>
+                    <% }) %>
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-muted small">User</label>
+            <input type="text" class="form-control" name="user" value="<%= filters.user %>" placeholder="Name">
+        </div>
+        <div class="col-md-8">
+            <label class="form-label text-muted small">Search details</label>
+            <input type="text" class="form-control" name="q" value="<%= filters.q %>" placeholder="Details, target type, or target ID">
+        </div>
+        <div class="col-md-4 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-dark">Filter</button>
+            <a href="/admin/logs" class="btn btn-outline-secondary">Reset</a>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table app-table align-middle">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (logs.length === 0) { %>
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">No audit logs found for this period.</td>
+                    </tr>
+                <% } else { %>
+                    <% logs.forEach(log => { %>
+                        <tr>
+                            <td class="text-nowrap"><small><%= new Date(log.created_at).toLocaleDateString() %></small></td>
+                            <td class="text-nowrap"><small><%= new Date(log.created_at).toLocaleTimeString() %></small></td>
+                            <td><strong><%= log.user_name || 'System' %></strong></td>
+                            <td><span class="badge bg-secondary"><%= log.action %></span></td>
+                            <td class="audit-detail-cell"><%= log.details || '-' %></td>
+                        </tr>
+                    <% }) %>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+
+    <% if (totalPages > 1) { %>
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item <%= currentPage === 1 ? 'disabled' : '' %>">
+                    <a class="page-link" href="?page=<%= currentPage - 1 %>&<%= filterQuery %>">Previous</a>
+                </li>
+                <% for(let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) { %>
+                    <li class="page-item <%= currentPage === i ? 'active' : '' %>">
+                        <a class="page-link" href="?page=<%= i %>&<%= filterQuery %>"><%= i %></a>
+                    </li>
+                <% } %>
+                <li class="page-item <%= currentPage === totalPages ? 'disabled' : '' %>">
+                    <a class="page-link" href="?page=<%= currentPage + 1 %>&<%= filterQuery %>">Next</a>
+                </li>
+            </ul>
+        </nav>
+    <% } %>
+</section>
+
+<%- include('../partials/footer') %>

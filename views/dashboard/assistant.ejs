@@ -5,40 +5,54 @@
     <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
         <div>
             <p class="section-kicker mb-2">Assistant Console</p>
-            <h2 class="mb-0">Live Sessions</h2>
+            <h2 class="mb-0">
+                Live Sessions
+                <span class="ms-2 fs-5 text-muted" id="live-clock">--:--:--</span>
+            </h2>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <span class="info-chip">Active Now <strong><%= stats.currently_active || 0 %></strong></span>
-            <span class="info-chip">Today <strong><%= stats.today_total || 0 %></strong></span>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <span class="info-chip">Active Now <strong id="stats-active"><%= stats.currently_active || 0 %></strong></span>
+            <span class="info-chip">Today <strong id="stats-today"><%= stats.today_total || 0 %></strong></span>
+            <div class="dropdown ms-2">
+                <button class="btn btn-outline-dark btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download me-1"></i> Export
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="/dashboard/export/live-sessions?format=csv">Download CSV</a></li>
+                    <li><a class="dropdown-item" href="/dashboard/export/live-sessions?format=excel">Download Excel</a></li>
+                    <li><a class="dropdown-item" href="/dashboard/export/live-sessions?format=pdf">Download PDF</a></li>
+                </ul>
+            </div>
         </div>
     </div>
 </section>
 
 <section class="list-card p-4">
-    <% if (activeSessions.length === 0) { %>
-        <p class="muted-copy mb-0">No active sessions right now.</p>
-    <% } else { %>
-        <div class="filter-group filter-toolbar mb-3">
-            <input type="text" class="form-control" placeholder="Search student or lab" data-filter-key="text">
-            <select class="form-select" data-filter-key="lab">
-                <option value="">All labs</option>
-                <% labs.forEach(lab => { %>
-                    <option value="<%= lab.name %>"><%= lab.name %></option>
-                <% }) %>
-            </select>
-        </div>
-        <div class="table-responsive">
-            <table class="table app-table">
-                <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Lab</th>
-                        <th>Since</th>
-                        <th>Duration</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody class="filter-targets">
+    <div class="filter-group filter-toolbar mb-3">
+        <input type="text" class="form-control" placeholder="Search student or lab" data-filter-key="text" id="live-search">
+        <select class="form-select" data-filter-key="lab" id="live-lab-filter">
+            <option value="">All labs</option>
+            <% labs.forEach(lab => { %>
+                <option value="<%= lab.name %>"><%= lab.name %></option>
+            <% }) %>
+        </select>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table app-table" id="live-sessions-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Lab</th>
+                    <th>Since</th>
+                    <th>Duration</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody class="filter-targets" id="live-sessions-body">
+                <% if (activeSessions.length === 0) { %>
+                    <tr class="empty-state-row"><td colspan="5" class="text-center text-muted py-4">No active sessions right now.</td></tr>
+                <% } else { %>
                     <% activeSessions.forEach(session => { %>
                         <% const minutes = Math.max(1, Math.round((Date.now() - new Date(session.check_in_time).getTime()) / 60000)); %>
                         <tr class="filter-item" data-filter-text="<%= `${session.user_name} ${session.enrollment_no || ''} ${session.lab_name}`.toLowerCase() %>" data-filter-lab="<%= session.lab_name %>">
@@ -59,18 +73,117 @@
                             </td>
                         </tr>
                     <% }) %>
-                </tbody>
-            </table>
-        </div>
-    <% } %>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
 </section>
+
+<!-- Socket.io and Live Client Logic -->
+<script src="/socket.io/socket.io.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const escapeHtml = (value) => String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    // Live Clock
+    const clockEl = document.getElementById("live-clock");
+    if (clockEl) {
+        setInterval(() => {
+            clockEl.textContent = new Date().toLocaleTimeString();
+        }, 1000);
+    }
+
+    // WebSocket Integration
+    const socket = io();
+    
+    socket.on('live-update', function(data) {
+        console.log("Live update received:", data);
+        
+        // Update stats
+        if (data.stats) {
+            document.getElementById("stats-active").textContent = data.stats.currently_active || 0;
+            document.getElementById("stats-today").textContent = data.stats.today_total || 0;
+        }
+
+        // Update table
+        const tbody = document.getElementById("live-sessions-body");
+        if (tbody && data.activeSessions) {
+            const currentFilterText = (document.getElementById("live-search")?.value || "").toLowerCase();
+            const currentFilterLab = document.getElementById("live-lab-filter")?.value || "";
+
+            if (data.activeSessions.length === 0) {
+                tbody.innerHTML = '<tr class="empty-state-row"><td colspan="5" class="text-center text-muted py-4">No active sessions right now.</td></tr>';
+                return;
+            }
+
+            let newHtml = "";
+            const now = Date.now();
+            
+            data.activeSessions.forEach(session => {
+                const checkInTime = new Date(session.check_in_time);
+                const minutes = Math.max(1, Math.round((now - checkInTime.getTime()) / 60000));
+                const filterText = `${session.user_name} ${session.enrollment_no || ''} ${session.lab_name}`.toLowerCase();
+                const safeFilterText = escapeHtml(filterText);
+                const safeLabName = escapeHtml(session.lab_name);
+                const safeUserName = escapeHtml(session.user_name);
+                const safeEnrollment = escapeHtml(session.enrollment_no || '-');
+                const safeLabId = escapeHtml(session.lab_id);
+                const safeUserId = escapeHtml(session.user_id);
+                
+                // Keep client-side filters applied
+                let displayStyle = "";
+                if (currentFilterText && !filterText.includes(currentFilterText)) displayStyle = 'style="display:none;"';
+                if (currentFilterLab && session.lab_name !== currentFilterLab) displayStyle = 'style="display:none;"';
+
+                newHtml += `
+                    <tr class="filter-item" data-filter-text="${safeFilterText}" data-filter-lab="${safeLabName}" ${displayStyle}>
+                        <td>
+                            <strong>${safeUserName}</strong><br>
+                            <span class="muted-copy">${safeEnrollment}</span>
+                        </td>
+                        <td>${safeLabName}</td>
+                        <td>${checkInTime.toLocaleTimeString()}</td>
+                        <td><span class="soft-badge ink duration-pill">${minutes} min</span></td>
+                        <td>
+                            <form action="/sessions/mark-violation" method="POST">
+                                <input type="hidden" name="case_type" value="false_entry">
+                                <input type="hidden" name="lab_id" value="${safeLabId}">
+                                <input type="hidden" name="user_id" value="${safeUserId}">
+                                <button type="submit" class="btn btn-sm btn-danger">Check Out</button>
+                            </form>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = newHtml;
+        }
+    });
+});
+</script>
 <% } %>
 
 <% if (activeSection === 'violations') { %>
 <section class="hero-panel mb-4">
-    <div>
-        <p class="section-kicker mb-2">Assistant Console</p>
-        <h2 class="mb-0">Recent Violations</h2>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Assistant Console</p>
+            <h2 class="mb-0">Violations Marked By Me</h2>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-outline-dark btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-download me-1"></i> Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="/dashboard/export/my-violations?format=csv">Download CSV</a></li>
+                <li><a class="dropdown-item" href="/dashboard/export/my-violations?format=excel">Download Excel</a></li>
+                <li><a class="dropdown-item" href="/dashboard/export/my-violations?format=pdf">Download PDF</a></li>
+            </ul>
+        </div>
     </div>
 </section>
 
@@ -87,35 +200,104 @@
                 <% }) %>
             </select>
         </div>
-        <div class="d-grid gap-3 filter-targets">
-            <% recentViolations.forEach(item => { %>
-                <div class="glass-panel filter-item" data-filter-text="<%= `${item.user_name} ${item.enrollment_no || ''} ${item.lab_name} ${item.note || ''}`.toLowerCase() %>" data-filter-lab="<%= item.lab_name %>">
-                    <div class="d-flex justify-content-between gap-3">
-                        <div>
-                            <strong><%= item.user_name %></strong>
-                            <div class="muted-copy"><%= item.lab_name %> | <%= item.enrollment_no %></div>
-                            <% if (item.note) { %><div class="muted-copy"><%= item.note %></div><% } %>
-                        </div>
-                        <div class="text-end d-flex flex-column align-items-end gap-2">
-                            <div class="soft-badge red">Count: <%= item.violation_count %></div>
-                            <div class="muted-copy"><%= new Date(item.created_at).toLocaleString() %></div>
-                            <form action="/sessions/remove-violation/<%= item.id %>" method="POST" onsubmit="return confirm('Remove this violation for <%= item.user_name %>?')">
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            <% }) %>
+        <div class="table-responsive bounded-history-table">
+            <table class="table app-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Lab</th>
+                        <th>Note</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Count</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody class="filter-targets">
+                    <% recentViolations.forEach(item => { %>
+                        <tr class="filter-item" data-filter-text="<%= `${item.user_name} ${item.enrollment_no || ''} ${item.lab_name} ${item.note || ''}`.toLowerCase() %>" data-filter-lab="<%= item.lab_name %>">
+                            <td>
+                                <strong><%= item.user_name %></strong><br>
+                                <span class="muted-copy"><%= item.enrollment_no || '-' %></span>
+                            </td>
+                            <td><%= item.lab_name %></td>
+                            <td class="text-break" style="max-width: 260px;"><%= item.note || '-' %></td>
+                            <td class="text-nowrap"><%= new Date(item.created_at).toLocaleDateString() %></td>
+                            <td class="text-nowrap"><%= new Date(item.created_at).toLocaleTimeString() %></td>
+                            <td><span class="soft-badge red"><%= item.violation_count %></span></td>
+                            <td class="text-end">
+                                <% if (!item.locked) { %>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#requestRemovalModal" data-violation-id="<%= item.id %>" data-student-name="<%= item.user_name %>">
+                                        Request Removal
+                                    </button>
+                                <% } %>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
         </div>
     <% } %>
 </section>
+
+<!-- Request Removal Modal -->
+<div class="modal fade" id="requestRemovalModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold">Request Violation Removal</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="" method="POST" id="requestRemovalForm">
+          <div class="modal-body py-4">
+            <p>You are requesting the admin to remove a violation for <strong id="removalStudentName"></strong>.</p>
+            <div class="mb-3">
+                <label class="form-label text-muted">Reason for removal</label>
+                <textarea class="form-control bg-light border-0" name="reason" rows="3" required placeholder="Explain why this violation was a mistake or should be forgiven..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer border-0">
+            <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary px-4">Submit Request</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const requestModal = document.getElementById('requestRemovalModal');
+    if (requestModal) {
+        requestModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const violationId = button.getAttribute('data-violation-id');
+            const studentName = button.getAttribute('data-student-name');
+            
+            document.getElementById('removalStudentName').textContent = studentName;
+            document.getElementById('requestRemovalForm').action = `/sessions/request-violation-removal/${violationId}`;
+        });
+    }
+});
+</script>
 <% } %>
 
 <% if (activeSection === 'directory') { %>
 <section class="hero-panel mb-4">
-    <div>
-        <p class="section-kicker mb-2">Assistant Console</p>
-        <h2 class="mb-0">Student Directory</h2>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+        <div>
+            <p class="section-kicker mb-2">Assistant Console</p>
+            <h2 class="mb-0">Student Directory</h2>
+        </div>
+        <div class="dropdown">
+            <button class="btn btn-outline-dark btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="bi bi-download me-1"></i> Export Directory
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="/dashboard/export/directory?format=csv">Download CSV</a></li>
+                <li><a class="dropdown-item" href="/dashboard/export/directory?format=excel">Download Excel</a></li>
+                <li><a class="dropdown-item" href="/dashboard/export/directory?format=pdf">Download PDF</a></li>
+            </ul>
+        </div>
     </div>
 </section>
 
@@ -152,9 +334,15 @@
                                     <% } %>
                                 </div>
                                 <div>
-                                    <a href="/sessions/student/<%= student.id %>" class="text-decoration-none text-dark">
-                                        <strong><%= student.name %></strong>
-                                    </a><br>
+                                    <% if (currentUser.can_view_statistics) { %>
+                                        <a href="/sessions/student/<%= student.id %>" class="text-decoration-none text-dark">
+                                            <strong><%= student.name %></strong>
+                                        </a><br>
+                                    <% } else { %>
+                                        <a href="#" class="text-decoration-none text-dark unauthorized-history-trigger" data-student-name="<%= student.name %>">
+                                            <strong><%= student.name %></strong>
+                                        </a><br>
+                                    <% } %>
                                     <span class="muted-copy"><%= student.email %></span>
                                 </div>
                             </div>
@@ -170,7 +358,11 @@
                             <% } else { %>
                                 <span class="soft-badge ink">Inactive</span>
                             <% } %>
-                            <a href="/sessions/student/<%= student.id %>" class="btn btn-sm btn-outline-dark ms-2">View History</a>
+                            <% if (currentUser.can_view_statistics) { %>
+                                <a href="/sessions/student/<%= student.id %>" class="btn btn-sm btn-outline-dark ms-2">View History</a>
+                            <% } else { %>
+                                <button type="button" class="btn btn-sm btn-outline-dark ms-2 unauthorized-history-trigger" data-student-name="<%= student.name %>">View History</button>
+                            <% } %>
                         </td>
                     </tr>
                 <% }) %>
@@ -178,6 +370,41 @@
         </table>
     </div>
 </section>
+
+<div class="modal fade" id="unauthorizedHistoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content access-denied-modal">
+            <div class="modal-body p-4 p-md-5 text-center">
+                <div class="access-denied-icon mx-auto mb-3">
+                    <i class="bi bi-shield-lock"></i>
+                </div>
+                <p class="section-kicker mb-2">Restricted Record</p>
+                <h4 class="mb-2">History access is locked</h4>
+                <p class="muted-copy mb-4">
+                    You don't have permission to view this record.
+                </p>
+                <button type="button" class="btn btn-dark px-4" data-bs-dismiss="modal">Understood</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const unauthorizedModal = document.getElementById('unauthorizedHistoryModal');
+    if (!unauthorizedModal || !window.bootstrap) return;
+
+    const modal = new bootstrap.Modal(unauthorizedModal);
+    const nameEl = document.getElementById('unauthorizedStudentName');
+    document.querySelectorAll('.unauthorized-history-trigger').forEach((trigger) => {
+        trigger.addEventListener('click', function(event) {
+            event.preventDefault();
+            if (nameEl) nameEl.textContent = `${this.dataset.studentName || 'this student'}'s`;
+            modal.show();
+        });
+    });
+});
+</script>
 <% } %>
 
 <% if (activeSection === 'statistics') { %>
@@ -193,21 +420,21 @@
     <div class="col-md-4">
         <div class="glass-panel p-4 text-center h-100">
             <i class="bi bi-person-check fs-1 text-primary mb-2 d-block"></i>
-            <h2 class="mb-1"><%= globalStats.total_students || 0 %></h2>
+            <h2 class="mb-1"><%= globalStats ? globalStats.total_students || 0 : 0 %></h2>
             <p class="muted-copy mb-0">Unique Students</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="glass-panel p-4 text-center h-100">
             <i class="bi bi-clock-history fs-1 text-primary mb-2 d-block"></i>
-            <h2 class="mb-1"><%= globalStats.total_hours || 0 %></h2>
+            <h2 class="mb-1"><%= globalStats ? globalStats.total_hours || 0 : 0 %></h2>
             <p class="muted-copy mb-0">Hours Checked In</p>
         </div>
     </div>
     <div class="col-md-4">
         <div class="glass-panel p-4 text-center h-100">
             <i class="bi bi-door-open fs-1 text-primary mb-2 d-block"></i>
-            <h2 class="mb-1"><%= globalStats.total_sessions || 0 %></h2>
+            <h2 class="mb-1"><%= globalStats ? globalStats.total_sessions || 0 : 0 %></h2>
             <p class="muted-copy mb-0">Total Lab Entries</p>
         </div>
     </div>
@@ -229,7 +456,7 @@
                 </tr>
             </thead>
             <tbody>
-                <% labStats.forEach(stat => { %>
+                <% if (labStats) { labStats.forEach(stat => { %>
                     <% const fillPercent = Math.min(100, Math.round((stat.avg_occupancy / stat.capacity) * 100)) || 0; %>
                     <% const isOverCapacity = stat.avg_occupancy > stat.capacity; %>
                     <tr>
@@ -260,7 +487,7 @@
                             <% } %>
                         </td>
                     </tr>
-                <% }) %>
+                <% }) } %>
             </tbody>
         </table>
     </div>

@@ -56,7 +56,7 @@ const User = {
 
   // Update user
   async update(id, fields) {
-    const { name, email, department, phone, is_active, profile_image, clear_profile_image, enrollment_no } = fields;
+    const { name, email, department, phone, is_active, profile_image, clear_profile_image, enrollment_no, can_view_statistics } = fields;
     const result = await db.query(
       `UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email),
        department = COALESCE($3, department), phone = COALESCE($4, phone),
@@ -67,9 +67,10 @@ const User = {
          ELSE profile_image
        END,
        enrollment_no = COALESCE($8, enrollment_no),
+       can_view_statistics = COALESCE($9, can_view_statistics),
        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9 RETURNING *`,
-      [name, email, department, phone, is_active, Boolean(clear_profile_image), profile_image || null, enrollment_no, id]
+       WHERE id = $10 RETURNING *`,
+      [name, email, department, phone, is_active, Boolean(clear_profile_image), profile_image || null, enrollment_no, can_view_statistics, id]
     );
     return result.rows[0];
   },
@@ -77,11 +78,18 @@ const User = {
   // Get all users (with optional role filter)
   async findAll(role = null) {
     let query =
-      "SELECT id, name, email, role, enrollment_no, department, phone, is_active, violation_count, profile_image, created_at, suspended_until FROM users";
+      "SELECT id, name, email, role, enrollment_no, department, phone, is_active, violation_count, profile_image, can_view_statistics, created_at, suspended_until FROM users";
     const params = [];
     if (role) {
-      query += " WHERE role = $1";
-      params.push(role);
+      // For 'student' filter, also include 'student+assistant'
+      if (role === "student") {
+        query += " WHERE role IN ('student', 'student+assistant')";
+      } else if (role === "assistant") {
+        query += " WHERE role IN ('assistant', 'student+assistant')";
+      } else {
+        query += " WHERE role = $1";
+        params.push(role);
+      }
     }
     query += " ORDER BY created_at DESC";
     const result = await db.query(query, params);
@@ -89,18 +97,32 @@ const User = {
   },
 
   async countByRole(role) {
-    const result = await db.query(
-      "SELECT COUNT(*)::int AS total FROM users WHERE role = $1",
-      [role]
-    );
+    let query;
+    const params = [];
+    if (role === "student") {
+      query = "SELECT COUNT(*)::int AS total FROM users WHERE role IN ('student', 'student+assistant')";
+    } else if (role === "assistant") {
+      query = "SELECT COUNT(*)::int AS total FROM users WHERE role IN ('assistant', 'student+assistant')";
+    } else {
+      query = "SELECT COUNT(*)::int AS total FROM users WHERE role = $1";
+      params.push(role);
+    }
+    const result = await db.query(query, params);
     return result.rows[0]?.total || 0;
   },
 
   async countActiveByRole(role) {
-    const result = await db.query(
-      "SELECT COUNT(*)::int AS total FROM users WHERE role = $1 AND is_active = TRUE",
-      [role]
-    );
+    let query;
+    const params = [];
+    if (role === "student") {
+      query = "SELECT COUNT(*)::int AS total FROM users WHERE role IN ('student', 'student+assistant') AND is_active = TRUE";
+    } else if (role === "assistant") {
+      query = "SELECT COUNT(*)::int AS total FROM users WHERE role IN ('assistant', 'student+assistant') AND is_active = TRUE";
+    } else {
+      query = "SELECT COUNT(*)::int AS total FROM users WHERE role = $1 AND is_active = TRUE";
+      params.push(role);
+    }
+    const result = await db.query(query, params);
     return result.rows[0]?.total || 0;
   },
 
@@ -122,7 +144,7 @@ const User = {
     const result = await db.query(
       `SELECT id, name, email, enrollment_no, department, violation_count, is_active, profile_image, suspended_until
        FROM users
-       WHERE role = 'student'
+       WHERE role IN ('student', 'student+assistant')
        ORDER BY violation_count DESC, name ASC`
     );
     return result.rows;
@@ -132,7 +154,7 @@ const User = {
     const result = await db.query(
       `SELECT id, name, enrollment_no, email, violation_count
        FROM users
-       WHERE role = 'student'
+       WHERE role IN ('student', 'student+assistant')
          AND is_active = TRUE
          AND (
            LOWER(enrollment_no) = LOWER($1)
@@ -153,6 +175,11 @@ const User = {
   },
 
   async earlyReactivate(id) {
+    // Lock all existing violations before resetting count
+    await db.query(
+      `UPDATE violation_logs SET locked = TRUE WHERE user_id = $1 AND locked = FALSE`,
+      [id]
+    );
     const result = await db.query(
       `UPDATE users SET is_active = TRUE, suspended_until = NULL, violation_count = 0 WHERE id = $1 RETURNING *`,
       [id]
@@ -205,7 +232,7 @@ const User = {
           continue;
         }
 
-        const validRoles = ["student", "assistant", "admin"];
+        const validRoles = ["student", "assistant", "admin", "student+assistant"];
         const role = validRoles.includes(u.role) ? u.role : "student";
 
         const password_hash = await bcrypt.hash(u.password, SALT_ROUNDS);

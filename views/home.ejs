@@ -1,20 +1,180 @@
 <%- include('partials/header') %>
 
-<section class="landing-hero">
-    <div class="landing-hero__panel">
-        <div class="landing-hero__content">
-            <div class="landing-hero__copyblock">
-                <p class="section-kicker mb-2">IIT Ropar</p>
-                <h1 class="landing-hero__title mb-3">Laboratory Access Administration System</h1>
-                <p class="landing-hero__copy mb-0">
-                    A centralized platform for managing student lab access, check-in and check-out,
-                    and operational oversight across institutional laboratories.
-                </p>
-            </div>
-            <div class="landing-hero__actions">
-                <a href="/auth/login" class="btn btn-primary landing-login-btn">Login To Continue</a>
-            </div>
+<style>
+    body {
+        overflow: hidden;
+    }
+
+    .public-shell {
+        width: min(100%, 1160px);
+        min-height: calc(100vh - 73px);
+        padding: 0.85rem 1.25rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .official-home {
+        width: 100%;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.72fr);
+        align-items: center;
+        gap: clamp(1.5rem, 4vw, 3rem);
+        padding: 0;
+    }
+
+    .official-home::before {
+        content: "";
+        position: absolute;
+        inset: 2% 40% auto auto;
+        width: min(34vw, 360px);
+        aspect-ratio: 1;
+        background: url("/icons/iit-ropar-logo.png?v=4") center / contain no-repeat;
+        opacity: 0.045;
+        pointer-events: none;
+    }
+
+    .official-home__main,
+    .official-card {
+        position: relative;
+        z-index: 1;
+    }
+
+    .official-home__main {
+        max-width: 620px;
+    }
+
+    .official-seal {
+        width: 84px;
+        height: 84px;
+        margin-bottom: 1.1rem;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(30, 41, 59, 0.14);
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .official-seal img {
+        width: 66px;
+        height: 66px;
+        object-fit: contain;
+    }
+
+    .official-home__title {
+        margin: 0 0 0.8rem;
+        max-width: 14ch;
+        color: #14233a;
+        font-size: clamp(2.2rem, 4.7vw, 4.25rem);
+        line-height: 1.06;
+    }
+
+    .official-home__copy {
+        max-width: 48ch;
+        margin-bottom: 1.1rem;
+        color: #526173;
+        font-size: clamp(0.98rem, 1.5vw, 1.1rem);
+        line-height: 1.5;
+    }
+
+    .official-card {
+        width: min(100%, 390px);
+        justify-self: stretch;
+        padding: 1.25rem;
+        border: 1px solid rgba(30, 41, 59, 0.14);
+        border-top: 5px solid #163a69;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.1);
+        backdrop-filter: none;
+    }
+
+    .official-card__title {
+        margin: 0 0 0.35rem;
+        color: #14233a;
+        font-family: "Merriweather", serif;
+        font-size: 1.15rem;
+        font-weight: 700;
+    }
+
+    .official-card__text {
+        margin: 0 0 1rem;
+        color: #526173;
+        line-height: 1.45;
+    }
+
+    .official-card__notice {
+        margin-bottom: 1rem;
+        padding: 0.8rem 0;
+        border-top: 1px solid rgba(30, 41, 59, 0.1);
+        border-bottom: 1px solid rgba(30, 41, 59, 0.1);
+        color: #334155;
+        font-size: 0.94rem;
+        line-height: 1.45;
+    }
+
+    .landing-login-btn {
+        width: 100%;
+        padding: 0.78rem 1.1rem;
+    }
+
+    @media (max-width: 992px) {
+        body {
+            overflow: auto;
+        }
+
+        .public-shell {
+            min-height: calc(100vh - 73px);
+            padding: 0.8rem 1rem;
+        }
+
+        .official-home {
+            grid-template-columns: 1fr;
+            gap: 0.85rem;
+            align-content: center;
+        }
+
+        .official-home__title {
+            max-width: 14ch;
+            font-size: clamp(1.95rem, 8vw, 3rem);
+        }
+
+        .official-seal {
+            width: 68px;
+            height: 68px;
+            margin-bottom: 0.75rem;
+        }
+
+        .official-seal img {
+            width: 52px;
+            height: 52px;
+        }
+    }
+</style>
+
+<section class="official-home" aria-labelledby="official-home-title">
+    <div class="official-home__main">
+        <div class="official-seal">
+            <img src="/icons/iit-ropar-logo.png?v=4" alt="IIT Ropar">
         </div>
+        <p class="section-kicker">Indian Institute of Technology Ropar</p>
+        <h1 id="official-home-title" class="official-home__title">Lab In/Out Management System</h1>
+        <p class="official-home__copy">
+            Official access page for labs at IIT Ropar. Please log in with your institutional credentials.
+        </p>
+    </div>
+
+    <div class="official-card" aria-label="Authorized access">
+        <h2 class="official-card__title">Authorized Access</h2>
+        <p class="official-card__text">
+            Sign in using your assigned institutional credentials.
+        </p>
+        <div class="official-card__notice">
+            Access to this system is restricted to approved users. Activity may be recorded in accordance with institute policy.
+        </div>
+        <a href="/auth/login" class="btn btn-primary landing-login-btn">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Login
+        </a>
     </div>
 </section>
 
