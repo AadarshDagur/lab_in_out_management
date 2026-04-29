@@ -50,14 +50,30 @@ async function ensureSystemSettingsTable() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS system_settings (
         key VARCHAR(100) PRIMARY KEY,
-        value VARCHAR(255) NOT NULL
+        value TEXT NOT NULL
       )
     `);
+
+    await pool.query("ALTER TABLE system_settings ALTER COLUMN value TYPE TEXT");
 
     await pool.query(
       `INSERT INTO system_settings (key, value)
        VALUES ('violation_limit', '3')
        ON CONFLICT (key) DO NOTHING`
+    );
+
+    await pool.query(
+      `INSERT INTO system_settings (key, value)
+       VALUES ('departments', $1)
+       ON CONFLICT (key) DO NOTHING`,
+      [JSON.stringify([
+        "Computer Science",
+        "Information Technology",
+        "Electronics",
+        "Electrical",
+        "Mechanical",
+        "Civil",
+      ])]
     );
   } catch (error) {
     console.error("Failed to ensure system settings table:", error.message);

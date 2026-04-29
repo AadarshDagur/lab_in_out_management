@@ -9,9 +9,9 @@ async function seedData() {
     await db.query(`
       INSERT INTO users (name, email, password_hash, role, enrollment_no, department)
       VALUES 
-      ('Alice Johnson', 'alice@example.com', 'dummyhash123', 'student', 'ENR1011', 'Computer Science'),
-      ('Bob Smith', 'bob@example.com', 'dummyhash123', 'student', 'ENR1012', 'Electronics'),
-      ('Charlie Brown', 'charlie@example.com', 'dummyhash123', 'student', 'ENR1013', 'Mechanical')
+      ('Aarav Sharma', 'aarav@iitrpr.ac.in', 'dummyhash123', 'student', 'ENR1011', 'Computer Science'),
+      ('Priya Singh', 'priya@iitrpr.ac.in', 'dummyhash123', 'student', 'ENR1012', 'Electronics'),
+      ('Rohan Verma', 'rohan@iitrpr.ac.in', 'dummyhash123', 'student', 'ENR1013', 'Mechanical')
       ON CONFLICT (email) DO NOTHING;
     `);
 

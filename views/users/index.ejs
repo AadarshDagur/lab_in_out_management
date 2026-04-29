@@ -32,11 +32,11 @@
                     </div>
                     <div class="col-md-2 mb-3">
                         <label for="name" class="form-label">Full Name</label>
-                        <input type="text" class="form-control" name="name" id="name" placeholder="John Doe" required>
+                        <input type="text" class="form-control" name="name" id="name" placeholder="Adarsh Chaudhary" required>
                     </div>
                     <div class="col-md-3 mb-3">
                         <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" name="email" id="email" placeholder="user@iitrpr.ac.in" pattern=".+@iitrpr\.ac\.in$" title="Email must end with @iitrpr.ac.in" required>
+                        <input type="email" class="form-control" name="email" id="email" placeholder="2023csb1321@iitrpr.ac.in" pattern=".+@iitrpr\.ac\.in$" title="Email must end with @iitrpr.ac.in" required>
                     </div>
                     <div class="col-md-3 mb-3">
                         <label for="password" class="form-label">Password</label>
@@ -61,12 +61,9 @@
                         <label for="department" class="form-label">Department</label>
                         <select class="form-select" name="department" id="department" required>
                             <option value="">Select</option>
-                            <option value="Computer Science">Computer Science</option>
-                            <option value="Information Technology">Information Technology</option>
-                            <option value="Electronics">Electronics</option>
-                            <option value="Electrical">Electrical</option>
-                            <option value="Mechanical">Mechanical</option>
-                            <option value="Civil">Civil</option>
+                            <% departments.forEach(department => { %>
+                                <option value="<%= department %>"><%= department %></option>
+                            <% }) %>
                         </select>
                     </div>
                     <div class="col-md-3 mb-3">

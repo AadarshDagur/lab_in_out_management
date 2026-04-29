@@ -12,6 +12,7 @@ router.use(isAuthenticated, authorizeRoles("admin"));
 // Settings
 router.get("/settings", settingsController.getSettings);
 router.post("/settings", settingsController.updateSettings);
+router.post("/settings/departments", settingsController.addDepartment);
 
 // Audit Logs
 router.get("/logs", auditController.index);

@@ -42,12 +42,9 @@
                     <div class="mb-3">
                         <label class="form-label">Department</label>
                         <select class="form-select" name="department">
-                            <option value="Computer Science" <%= user.department === 'Computer Science' ? 'selected' : '' %>>Computer Science</option>
-                            <option value="Information Technology" <%= user.department === 'Information Technology' ? 'selected' : '' %>>Information Technology</option>
-                            <option value="Electronics" <%= user.department === 'Electronics' ? 'selected' : '' %>>Electronics</option>
-                            <option value="Electrical" <%= user.department === 'Electrical' ? 'selected' : '' %>>Electrical</option>
-                            <option value="Mechanical" <%= user.department === 'Mechanical' ? 'selected' : '' %>>Mechanical</option>
-                            <option value="Civil" <%= user.department === 'Civil' ? 'selected' : '' %>>Civil</option>
+                            <% departments.forEach(department => { %>
+                                <option value="<%= department %>" <%= user.department === department ? 'selected' : '' %>><%= department %></option>
+                            <% }) %>
                         </select>
                     </div>
                     <div class="mb-3">

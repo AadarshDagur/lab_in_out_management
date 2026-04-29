@@ -24,7 +24,7 @@ router.post(
     body("name").trim().notEmpty().withMessage("Name is required"),
     body("email").isEmail().withMessage("Please enter a valid email")
       .custom((value) => {
-        if (!value.endsWith('@iitrpr.ac.in')) {
+        if (!String(value || "").toLowerCase().endsWith("@iitrpr.ac.in")) {
           throw new Error('Email must be an @iitrpr.ac.in address');
         }
         return true;
@@ -32,7 +32,7 @@ router.post(
     body("password")
       .isLength({ min: 6 })
       .withMessage("Password must be at least 6 characters"),
-    body("role").isIn(["student", "assistant", "admin"]).withMessage("Invalid role"),
+    body("role").isIn(["student", "assistant", "admin", "student+assistant"]).withMessage("Invalid role"),
     body("enrollment_no").trim().notEmpty().withMessage("Enrollment / Staff ID is required"),
     body("department").trim().notEmpty().withMessage("Department is required"),
     body("phone").trim().notEmpty().withMessage("Phone number is required"),

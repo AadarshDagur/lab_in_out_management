@@ -12,12 +12,15 @@
         <p class="text-muted mt-1">Configure global parameters for the lab system</p>
       </div>
     </div>
-    <!-- Settings Card -->
-    <div class="row">
+    <div class="row g-4">
       <div class="col-lg-6">
-        <div class="card shadow-sm border-0">
-          <div class="card-header bg-white border-bottom py-3">
-            <h6 class="m-0 font-weight-bold text-primary">Violation Limitations</h6>
+        <div class="card shadow-sm border-0 settings-panel">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-3">
+            <span class="settings-panel-icon warning"><i class="bi bi-shield-exclamation"></i></span>
+            <div>
+              <h6 class="m-0 font-weight-bold text-primary">Violation Limitations</h6>
+              <small class="text-muted">Control automatic suspension threshold</small>
+            </div>
           </div>
           <div class="card-body">
             <form action="/admin/settings" method="POST">
@@ -38,6 +41,47 @@
                 <i class="bi bi-save me-1"></i> Save Settings
               </button>
             </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card shadow-sm border-0 settings-panel">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+              <span class="settings-panel-icon teal"><i class="bi bi-building"></i></span>
+              <div>
+                <h6 class="m-0 font-weight-bold text-primary">Departments</h6>
+                <small class="text-muted">Allowed departments for forms and CSV uploads</small>
+              </div>
+            </div>
+            <span class="soft-badge ink"><%= departments.length %> active</span>
+          </div>
+          <div class="card-body">
+            <form action="/admin/settings/departments" method="POST" class="department-add-form mb-3">
+              <label for="department" class="form-label font-weight-bold">
+                Add Department
+                <i class="bi bi-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="CSV rows are accepted only when the department matches this list."></i>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text bg-light"><i class="bi bi-plus-lg text-success"></i></span>
+                <input type="text" class="form-control" id="department" name="department" placeholder="e.g. Mathematics" maxlength="80" required>
+                <button type="submit" class="btn btn-primary">
+                  <i class="bi bi-plus-circle me-1"></i>Add
+                </button>
+              </div>
+            </form>
+
+            <div class="department-list" aria-label="Department list">
+              <% departments.forEach((department, index) => { %>
+                <div class="department-row">
+                  <div class="department-row-main">
+                    <span class="department-index"><%= index + 1 %></span>
+                    <span class="department-name"><%= department %></span>
+                  </div>
+                  <span class="soft-badge teal">Allowed</span>
+                </div>
+              <% }) %>
+            </div>
           </div>
         </div>
       </div>

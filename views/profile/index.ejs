@@ -115,12 +115,9 @@
                     <div class="col-md-6">
                         <label class="form-label">Department</label>
                         <select class="form-select" name="department" <%= currentUser.role !== 'admin' ? 'disabled' : '' %>>
-                            <option value="Computer Science" <%= profileUser.department === 'Computer Science' ? 'selected' : '' %>>Computer Science</option>
-                            <option value="Information Technology" <%= profileUser.department === 'Information Technology' ? 'selected' : '' %>>Information Technology</option>
-                            <option value="Electronics" <%= profileUser.department === 'Electronics' ? 'selected' : '' %>>Electronics</option>
-                            <option value="Electrical" <%= profileUser.department === 'Electrical' ? 'selected' : '' %>>Electrical</option>
-                            <option value="Mechanical" <%= profileUser.department === 'Mechanical' ? 'selected' : '' %>>Mechanical</option>
-                            <option value="Civil" <%= profileUser.department === 'Civil' ? 'selected' : '' %>>Civil</option>
+                            <% departments.forEach(department => { %>
+                                <option value="<%= department %>" <%= profileUser.department === department ? 'selected' : '' %>><%= department %></option>
+                            <% }) %>
                         </select>
                     </div>
                     <div class="col-md-6">

@@ -1,5 +1,6 @@
 const User = require("../models/userModel");
 const AuditLog = require("../models/auditLogModel");
+const Settings = require("../models/settingsModel");
 const { validationResult } = require("express-validator");
 const { saveProfileImage, deleteProfileImage } = require("../services/storageService");
 
@@ -40,6 +41,7 @@ const userController = {
       const students = await User.findAll("student");
       const assistants = await User.findAll("assistant");
       const admins = await User.findAll("admin");
+      const departments = await Settings.getDepartments();
 
       const bulkResults = req.session?.bulkResults || null;
       delete req.session?.bulkResults;
@@ -50,6 +52,7 @@ const userController = {
         assistants,
         admins,
         bulkResults,
+        departments,
       });
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -69,7 +72,16 @@ const userController = {
       }
 
       const { name, email, password, role, enrollment_no, department, phone } = req.body;
-      profileImage = await saveProfileImage(req.file);
+      if (!User.isIitrprEmail(email)) {
+        req.flash("error", "Email must be an @iitrpr.ac.in address");
+        return res.redirect("/users");
+      }
+
+      const allowedDepartments = await Settings.getDepartments();
+      if (!allowedDepartments.includes(department)) {
+        req.flash("error", "Please select a valid department");
+        return res.redirect("/users");
+      }
 
       if (!enrollment_no || !enrollment_no.trim()) {
         req.flash("error", "Enrollment / Staff ID is required");
@@ -80,7 +92,6 @@ const userController = {
         req.flash("error", "Phone number is required");
         return res.redirect("/users");
       }
-
       const existingUser = await User.findByEmail(email);
       if (existingUser) {
         req.flash("error", "An account with this email already exists");
@@ -94,6 +105,8 @@ const userController = {
           return res.redirect("/users");
         }
       }
+
+      profileImage = await saveProfileImage(req.file);
 
       const createdUser = await User.create({
         name,
@@ -136,6 +149,17 @@ const userController = {
       const existingUser = await User.findById(req.params.id);
       if (!existingUser) {
         req.flash("error", "User not found");
+        return res.redirect("/users");
+      }
+
+      if (email && !User.isIitrprEmail(email)) {
+        req.flash("error", "Email must be an @iitrpr.ac.in address");
+        return res.redirect("/users");
+      }
+
+      const allowedDepartments = await Settings.getDepartments();
+      if (department && department !== existingUser.department && !allowedDepartments.includes(department)) {
+        req.flash("error", "Please select a valid department");
         return res.redirect("/users");
       }
 
@@ -318,7 +342,7 @@ const userController = {
       }
 
       const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""));
-      const requiredCols = ["name", "email", "password", "role", "enrollment_no"];
+      const requiredCols = ["name", "email", "password", "role", "enrollment_no", "department"];
       const missingCols = requiredCols.filter((c) => !header.includes(c));
       if (missingCols.length > 0) {
         req.flash("error", `CSV is missing required columns: ${missingCols.join(", ")}`);
@@ -327,6 +351,8 @@ const userController = {
 
       const users = [];
       let skipped = 0;
+      const allowedDepartments = await Settings.getDepartments();
+      const allowedDepartmentSet = new Set(allowedDepartments.map((department) => department.toLowerCase()));
       for (let i = 1; i < lines.length; i++) {
         const values = parseCSVLine(lines[i]);
         if (values.length === 0 || values.every((v) => !v.trim())) {
@@ -344,6 +370,15 @@ const userController = {
         } else {
           row.role = row.role.toLowerCase();
         }
+
+        const normalizedDepartment = allowedDepartments.find(
+          (department) => department.toLowerCase() === String(row.department || "").toLowerCase()
+        );
+        if (!row.department || !allowedDepartmentSet.has(row.department.toLowerCase())) {
+          skipped++;
+          continue;
+        }
+        row.department = normalizedDepartment;
         
         users.push(row);
       }
@@ -377,8 +412,14 @@ const userController = {
   },
 
   // GET /users/bulk-upload/template — download CSV template
-  downloadTemplate(req, res) {
-    const template = "name,email,password,role,enrollment_no,department,phone\nJohn Doe,john@iitrpr.ac.in,Pass@123,student,2023CSB1001,Computer Science,9876543210\nJane Smith,jane@iitrpr.ac.in,Pass@456,student+assistant,2023EEB1002,Electronics,9876543211\n";
+  async downloadTemplate(req, res) {
+    const departments = await Settings.getDepartments();
+    const firstDepartment = departments[0] || "Computer Science";
+    const secondDepartment = departments[1] || firstDepartment;
+    const template = `name,email,password,role,enrollment_no,department,phone
+Aarav Sharma,aarav@iitrpr.ac.in,Pass@123,student,2023CSB1001,${firstDepartment},9876543210
+Priya Singh,priya@iitrpr.ac.in,Pass@456,student+assistant,2023EEB1002,${secondDepartment},9876543211
+`;
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=users_template.csv");
     res.send(template);

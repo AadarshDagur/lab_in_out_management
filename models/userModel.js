@@ -2,8 +2,13 @@ const db = require("../config/db");
 const bcrypt = require("bcrypt");
 
 const SALT_ROUNDS = 10;
+const IITRPR_EMAIL_REGEX = /^[^\s@]+@iitrpr\.ac\.in$/i;
 
 const User = {
+  isIitrprEmail(email) {
+    return IITRPR_EMAIL_REGEX.test(String(email || "").trim());
+  },
+
   // Helper to auto-reactivate if suspension expired
   async checkAndReactivate(user) {
     if (user && user.suspended_until && new Date() >= new Date(user.suspended_until)) {
@@ -40,6 +45,10 @@ const User = {
 
   // Create new user
   async create({ name, email, password, role, enrollment_no, department, phone, profile_image }) {
+    if (!this.isIitrprEmail(email)) {
+      throw new Error("Email must be an @iitrpr.ac.in address");
+    }
+
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = await db.query(
       `INSERT INTO users (name, email, password_hash, role, enrollment_no, department, phone, profile_image)
@@ -57,6 +66,10 @@ const User = {
   // Update user
   async update(id, fields) {
     const { name, email, department, phone, is_active, profile_image, clear_profile_image, enrollment_no, can_view_statistics } = fields;
+    if (email && !this.isIitrprEmail(email)) {
+      throw new Error("Email must be an @iitrpr.ac.in address");
+    }
+
     const result = await db.query(
       `UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email),
        department = COALESCE($3, department), phone = COALESCE($4, phone),
@@ -209,6 +222,10 @@ const User = {
         }
         if (!u.email || !u.email.trim()) {
           errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Email is required" });
+          continue;
+        }
+        if (!this.isIitrprEmail(u.email)) {
+          errors.push({ row: rowNum, name: u.name, email: u.email, reason: "Email must be an @iitrpr.ac.in address" });
           continue;
         }
         if (!u.password || u.password.length < 6) {

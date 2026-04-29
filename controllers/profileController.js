@@ -1,5 +1,6 @@
 const User = require("../models/userModel");
 const LabSession = require("../models/sessionModel");
+const Settings = require("../models/settingsModel");
 const bcrypt = require("bcrypt");
 const { saveProfileImage, deleteProfileImage } = require("../services/storageService");
 
@@ -13,11 +14,13 @@ const profileController = {
       }
 
       const recentSessions = await LabSession.getUserHistory(user.id, 5);
+      const departments = await Settings.getDepartments();
 
       res.render("profile/index", {
         title: "My Profile",
         profileUser: user,
         recentSessions,
+        departments,
       });
     } catch (err) {
       console.error("Profile page error:", err);
@@ -62,6 +65,11 @@ const profileController = {
           updateFields.name = req.body.name.trim();
         }
         if (req.body.department) {
+          const departments = await Settings.getDepartments();
+          if (req.body.department !== existingUser.department && !departments.includes(req.body.department)) {
+            req.flash("error", "Please select a valid department");
+            return res.redirect("/profile");
+          }
           updateFields.department = req.body.department;
         }
       }
@@ -69,6 +77,11 @@ const profileController = {
       // Admin can also edit email
       if (role === "admin") {
         if (req.body.email && req.body.email.trim()) {
+          if (!User.isIitrprEmail(req.body.email)) {
+            req.flash("error", "Email must be an @iitrpr.ac.in address");
+            return res.redirect("/profile");
+          }
+
           // Verify not already taken
           const existingEmail = await User.findByEmail(req.body.email.trim());
           if (existingEmail && existingEmail.id !== userId) {
