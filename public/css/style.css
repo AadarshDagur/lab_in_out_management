@@ -862,7 +862,7 @@ main {
   gap: 0.65rem;
   max-height: 370px;
   overflow-y: auto;
-  padding-right: 0.15rem;
+  padding: 0.25rem 0.15rem 0.25rem 0;
 }
 
 .department-row {
@@ -871,10 +871,20 @@ main {
   justify-content: space-between;
   gap: 0.85rem;
   min-height: 58px;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(21, 32, 51, 0.09);
+  padding: 0.72rem 0.85rem;
+  border: 1px solid rgba(31, 79, 143, 0.13);
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  background:
+    linear-gradient(90deg, rgba(31, 79, 143, 0.08), transparent 46%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.department-row:hover {
+  border-color: rgba(31, 79, 143, 0.26);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.07);
+  transform: translateY(-1px);
 }
 
 .department-row-main {
@@ -884,24 +894,24 @@ main {
   min-width: 0;
 }
 
-.department-index {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+.department-row-icon {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: rgba(31, 79, 143, 0.1);
-  color: var(--brand-deep);
-  font-weight: 700;
-  font-size: 0.82rem;
+  border-radius: 10px;
+  background: rgba(15, 118, 110, 0.11);
+  color: var(--accent);
+  font-size: 1rem;
 }
 
 .department-name {
   min-width: 0;
   overflow-wrap: anywhere;
   font-weight: 700;
+  color: var(--ink);
 }
 
 .form-control {
