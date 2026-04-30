@@ -1,4 +1,5 @@
 require("dotenv").config();
+process.env.TZ = "Asia/Kolkata"; // Force IST for all server-side date formatting
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
