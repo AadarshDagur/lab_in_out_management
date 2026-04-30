@@ -9,5 +9,6 @@ router.get("/", statisticsController.index);
 router.get("/export", statisticsController.exportStatistics);
 router.get("/api/utilization", statisticsController.apiLabUtilization);
 router.get("/api/batch", statisticsController.apiBatchUtilization);
+router.get("/api/overfill", statisticsController.apiOverfill);
 
 module.exports = router;

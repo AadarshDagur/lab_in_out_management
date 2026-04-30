@@ -21,8 +21,8 @@ async function seedData() {
       INSERT INTO labs (name, location, capacity, open_time, close_time)
       SELECT name, location, capacity, open_time::TIME, close_time::TIME FROM (VALUES 
       ('Advanced Computing Lab', 'Building B, Room 204', 40, '09:00', '21:00'),
-      ('Physics and Electronics Lab', 'Building C, Room 102', 25, '08:00', '19:00'),
-      ('AI & ML Research Center', 'Building A, Room 301', 20, '09:00', '18:00')
+      ('Physics and Electronics Lab', 'Building C, Room 102', 25, '09:00', '21:00'),
+      ('AI & ML Research Center', 'Building A, Room 301', 20, '09:00', '21:00')
       ) AS t(name, location, capacity, open_time, close_time)
       WHERE NOT EXISTS (
         SELECT 1 FROM labs WHERE labs.name = t.name
@@ -50,8 +50,9 @@ async function seedData() {
         const daysAgo = Math.floor(Math.random() * 30);
         let checkIn = new Date(now.getTime() - (daysAgo * 24 * 60 * 60 * 1000));
         
-        // Random hour for checkin between 9am and 5pm
-        const hour = 9 + Math.floor(Math.random() * 8);
+        // Random hour for checkin during open windows: 9am-1pm or 2pm-9pm
+        const openHours = [9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20];
+        const hour = openHours[Math.floor(Math.random() * openHours.length)];
         const minute = Math.floor(Math.random() * 60);
         checkIn.setHours(hour, minute, 0, 0);
 

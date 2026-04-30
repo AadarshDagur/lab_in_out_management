@@ -74,6 +74,9 @@ function authorizeRoles(...roles) {
     const effectiveRole = normalizeActiveRole(req.session.user);
     const hasRole = roles.some(r => roleMatches(effectiveRole, r));
     if (!hasRole) {
+      if (req.xhr || req.path.startsWith("/api/") || (req.get("accept") || "").includes("application/json")) {
+        return res.status(403).json({ error: "You do not have permission to access this page" });
+      }
       req.flash("error", "You do not have permission to access this page");
       return res.redirect(getHomePathForRole(req.session.user));
     }
@@ -127,7 +130,7 @@ async function setLocals(req, res, next) {
   res.locals.activeSection = null;
   res.locals.pendingViolationRequests = 0;
 
-  if (req.session.user) {
+  if (req.session && req.session.user) {
     try {
       const User = require("../models/userModel");
       const freshUser = await User.findById(req.session.user.id);
@@ -165,8 +168,13 @@ async function setLocals(req, res, next) {
         }
       }
     } catch (e) {
-      res.locals.currentUser = req.session.user;
+      res.locals.currentUser = req.session ? req.session.user : null;
       res.locals.pendingViolationRequests = 0;
+    }
+
+    if (!req.session || !req.session.user) {
+      res.locals.navLabs = [];
+      return next();
     }
 
     // Load pending violation request count for admin
@@ -182,11 +190,11 @@ async function setLocals(req, res, next) {
   }
 
   // Load labs for navbar (assistant only)
-  const effectiveRole = req.session.user ? normalizeActiveRole(req.session.user) : null;
+  const effectiveRole = req.session && req.session.user ? normalizeActiveRole(req.session.user) : null;
   if (effectiveRole === 'assistant') {
     try {
       const db = require("../config/db");
-      const result = await db.query("SELECT id, name FROM labs WHERE is_active = TRUE ORDER BY name");
+      const result = await db.query("SELECT id, name, is_active FROM labs ORDER BY is_active DESC, name");
       res.locals.navLabs = result.rows;
     } catch (e) {
       res.locals.navLabs = [];

@@ -8,7 +8,7 @@
     </div>
 </section>
 
-<section class="list-card p-4">
+<section class="list-card p-4" id="violationRequestsPanel">
     <% if (requests.length === 0) { %>
         <div class="text-center py-5">
             <i class="bi bi-check-circle fs-1 text-success mb-3 d-block"></i>
@@ -41,7 +41,11 @@
                                 <small><%= request.lab_name %></small>
                             </td>
                             <td><strong><%= request.requested_by_name %></strong></td>
-                            <td class="text-break" style="max-width: 300px;"><%= request.reason %></td>
+                            <td style="max-width: 250px;">
+                                <div style="max-height: 100px; overflow-y: auto; word-wrap: break-word; white-space: pre-wrap;" class="small">
+                                    <%= request.reason %>
+                                </div>
+                            </td>
                             <td>
                                 <% if (request.status === 'pending') { %>
                                     <div class="d-flex gap-2">
@@ -133,27 +137,126 @@ document.addEventListener('DOMContentLoaded', function() {
     const requestedBy = document.getElementById('decisionRequestedBy');
     const lab = document.getElementById('decisionLab');
 
-    document.querySelectorAll('.violation-decision-trigger').forEach((button) => {
-        button.addEventListener('click', function() {
-            const isApprove = this.dataset.decision === 'approve';
-            form.action = this.dataset.actionUrl;
-            student.textContent = this.dataset.student || '-';
-            requestedBy.textContent = this.dataset.requestedBy || '-';
-            lab.textContent = this.dataset.lab || '-';
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        })[char]);
+    }
 
-            modalEl.classList.toggle('decision-modal-approve', isApprove);
-            modalEl.classList.toggle('decision-modal-reject', !isApprove);
-            icon.innerHTML = isApprove ? '<i class="bi bi-shield-check"></i>' : '<i class="bi bi-shield-x"></i>';
-            kicker.textContent = isApprove ? 'Approve Request' : 'Reject Request';
-            title.textContent = isApprove ? 'Approve removal request?' : 'Reject removal request?';
-            copy.textContent = isApprove
-                ? 'The violation will be removed and the student record will be updated.'
-                : 'The request will be closed and the violation will remain on the record.';
-            submit.textContent = isApprove ? 'Approve Request' : 'Reject Request';
-            submit.className = isApprove ? 'btn btn-success px-4' : 'btn btn-danger px-4';
-            modal.show();
-        });
+    function renderRequests(requests) {
+        const panel = document.getElementById('violationRequestsPanel');
+        if (!panel) return;
+        if (!requests.length) {
+            panel.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="bi bi-check-circle fs-1 text-success mb-3 d-block"></i>
+                    <h4 class="text-muted">All caught up!</h4>
+                    <p class="muted-copy mb-0">There are no pending requests to review.</p>
+                </div>
+            `;
+            return;
+        }
+        panel.innerHTML = `
+            <div class="table-responsive">
+                <table class="table app-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date Requested</th>
+                            <th>Student</th>
+                            <th>Violation Details</th>
+                            <th>Requested By</th>
+                            <th>Reason</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${requests.map(request => `
+                            <tr>
+                                <td class="text-nowrap"><small>${new Date(request.created_at).toLocaleString()}</small></td>
+                                <td>
+                                    <strong>${escapeHtml(request.student_name)}</strong><br>
+                                    <span class="muted-copy">${escapeHtml(request.enrollment_no || '-')}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger mb-1">Violation</span><br>
+                                    <small>${escapeHtml(request.lab_name)}</small>
+                                </td>
+                                <td><strong>${escapeHtml(request.requested_by_name)}</strong></td>
+                                <td class="text-break" style="max-width: 300px;">${escapeHtml(request.reason || '-')}</td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-success violation-decision-trigger"
+                                            data-action-url="/admin/violation-requests/${request.id}/approve"
+                                            data-decision="approve"
+                                            data-student="${escapeHtml(request.student_name)}"
+                                            data-requested-by="${escapeHtml(request.requested_by_name)}"
+                                            data-lab="${escapeHtml(request.lab_name)}">
+                                            Approve
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-danger violation-decision-trigger"
+                                            data-action-url="/admin/violation-requests/${request.id}/reject"
+                                            data-decision="reject"
+                                            data-student="${escapeHtml(request.student_name)}"
+                                            data-requested-by="${escapeHtml(request.requested_by_name)}"
+                                            data-lab="${escapeHtml(request.lab_name)}">
+                                            Reject
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function refreshRequests() {
+        try {
+            const response = await fetch('/api/admin/violation-requests', {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderRequests(data.requests || []);
+        } catch (error) {
+            console.warn('Violation request refresh failed:', error);
+        }
+    }
+
+    document.addEventListener('click', function(event) {
+        const button = event.target.closest('.violation-decision-trigger');
+        if (!button) return;
+        const isApprove = button.dataset.decision === 'approve';
+        form.action = button.dataset.actionUrl;
+        student.textContent = button.dataset.student || '-';
+        requestedBy.textContent = button.dataset.requestedBy || '-';
+        lab.textContent = button.dataset.lab || '-';
+
+        modalEl.classList.toggle('decision-modal-approve', isApprove);
+        modalEl.classList.toggle('decision-modal-reject', !isApprove);
+        icon.innerHTML = isApprove ? '<i class="bi bi-shield-check"></i>' : '<i class="bi bi-shield-x"></i>';
+        kicker.textContent = isApprove ? 'Approve Request' : 'Reject Request';
+        title.textContent = isApprove ? 'Approve removal request?' : 'Reject removal request?';
+        copy.textContent = isApprove
+            ? 'The violation will be removed and the student record will be updated.'
+            : 'The request will be closed and the violation will remain on the record.';
+        submit.textContent = isApprove ? 'Approve Request' : 'Reject Request';
+        submit.className = isApprove ? 'btn btn-success px-4' : 'btn btn-danger px-4';
+        modal.show();
     });
+
+    document.addEventListener('app:app-update', (event) => {
+        if (!event.detail || event.detail.type === 'violation-request' || event.detail.type === 'audit-log') {
+            window.labRunAutoRefresh(refreshRequests);
+        }
+    });
+    setInterval(() => window.labRunAutoRefresh(refreshRequests), 3000);
 });
 </script>
 

@@ -41,10 +41,11 @@ CREATE TABLE labs (
     name VARCHAR(100) NOT NULL,
     location VARCHAR(200),
     capacity INT NOT NULL DEFAULT 30,
-    open_time TIME DEFAULT '08:00',
-    close_time TIME DEFAULT '18:00',
+    open_time TIME DEFAULT '09:00',
+    close_time TIME DEFAULT '21:00',
     is_active BOOLEAN DEFAULT TRUE,
     manual_inactive BOOLEAN DEFAULT FALSE,
+    manual_active BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

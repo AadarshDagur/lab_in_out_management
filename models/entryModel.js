@@ -71,7 +71,13 @@ const Entry = {
       `SELECT dl.id, dl.note, dl.created_at, dl.user_id, dl.locked,
               u.name AS user_name, u.enrollment_no, u.violation_count,
               l.name AS lab_name,
-              m.name AS marked_by_name
+              m.name AS marked_by_name,
+              (
+                SELECT status FROM violation_removal_requests vrr 
+                WHERE vrr.violation_id = dl.id
+                ORDER BY created_at DESC
+                LIMIT 1
+              ) AS removal_request_status
        FROM violation_logs dl
        JOIN users u ON dl.user_id = u.id
        JOIN labs l ON dl.lab_id = l.id
@@ -89,7 +95,13 @@ const Entry = {
       `SELECT dl.id, dl.note, dl.created_at, dl.user_id, dl.locked,
               u.name AS user_name, u.enrollment_no, u.violation_count,
               l.name AS lab_name,
-              m.name AS marked_by_name
+              m.name AS marked_by_name,
+              (
+                SELECT status FROM violation_removal_requests vrr 
+                WHERE vrr.violation_id = dl.id
+                ORDER BY created_at DESC
+                LIMIT 1
+              ) AS removal_request_status
        FROM violation_logs dl
        JOIN users u ON dl.user_id = u.id
        JOIN labs l ON dl.lab_id = l.id
@@ -105,10 +117,20 @@ const Entry = {
     const result = await db.query(
       `SELECT dl.id, dl.note, dl.created_at, dl.locked,
               l.name AS lab_name,
-              m.name AS marked_by_name
+              m.name AS marked_by_name,
+              pending_request.id AS pending_request_id,
+              pending_request.status AS removal_request_status,
+              pending_request.created_at AS pending_request_created_at
        FROM violation_logs dl
        JOIN labs l ON dl.lab_id = l.id
        LEFT JOIN users m ON dl.marked_by = m.id
+       LEFT JOIN LATERAL (
+         SELECT vrr.id, vrr.created_at, vrr.status
+         FROM violation_removal_requests vrr
+         WHERE vrr.violation_id = dl.id
+         ORDER BY vrr.created_at DESC
+         LIMIT 1
+       ) pending_request ON TRUE
        WHERE dl.user_id = $1
        ORDER BY dl.created_at DESC`,
       [userId]

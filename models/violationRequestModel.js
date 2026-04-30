@@ -16,6 +16,9 @@ const ViolationRequest = {
        VALUES ($1, $2, $3) RETURNING *`,
       [violationId, requestedBy, reason || null]
     );
+    if (global.__broadcastAppUpdate) {
+      global.__broadcastAppUpdate("violation-request", { status: "pending", requestId: result.rows[0].id });
+    }
     return result.rows[0];
   },
 
@@ -91,6 +94,9 @@ const ViolationRequest = {
       `UPDATE violation_removal_requests SET status = 'approved', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP WHERE id = $2`,
       [reviewedBy, requestId]
     );
+    if (global.__broadcastAppUpdate) {
+      global.__broadcastAppUpdate("violation-request", { status: "approved", requestId: Number(requestId) });
+    }
 
     return request;
   },
@@ -100,6 +106,9 @@ const ViolationRequest = {
       `UPDATE violation_removal_requests SET status = 'rejected', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
       [reviewedBy, requestId]
     );
+    if (global.__broadcastAppUpdate) {
+      global.__broadcastAppUpdate("violation-request", { status: "rejected", requestId: Number(requestId) });
+    }
     return result.rows[0];
   },
 

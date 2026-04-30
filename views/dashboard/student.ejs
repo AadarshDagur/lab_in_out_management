@@ -7,14 +7,12 @@
             <h2 class="mb-3">Dashboard</h2>
             <div class="info-strip">
                 <span class="info-chip">Enrollment <strong><%= currentUser.enrollment_no || 'N/A' %></strong></span>
-                <span class="info-chip">Violations <strong><%= student.violation_count || 0 %></strong></span>
-                <% if (activeSession) { %>
-                    <span class="info-chip">Active Lab <strong><%= activeSession.lab_name %></strong></span>
-                <% } %>
+                <span class="info-chip">Violations <strong id="student-violation-count"><%= student.violation_count || 0 %></strong></span>
+                <span class="info-chip" id="student-active-lab-chip" style="<%= activeSession ? '' : 'display:none;' %>">Active Lab <strong><%= activeSession ? activeSession.lab_name : '' %></strong></span>
             </div>
         </div>
         <div class="col-lg-4">
-            <div class="glass-panel">
+            <div class="glass-panel" id="student-active-session-panel">
                 <% if (activeSession) { %>
                     <p class="section-kicker mb-2">Active Session</p>
                     <h4><%= activeSession.lab_name %></h4>
@@ -33,40 +31,103 @@
     </div>
 </section>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    window.studentDashboardActiveSession = <%- JSON.stringify(activeSession || null).replace(/</g, '\\u003c') %>;
+    const panel = document.getElementById('student-active-session-panel');
+    const activeLabChip = document.getElementById('student-active-lab-chip');
+    const violationCount = document.getElementById('student-violation-count');
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderStudentSummary(data) {
+        const activeSession = data.activeSession || null;
+        window.studentDashboardActiveSession = activeSession || null;
+        if (violationCount && data.student) {
+            violationCount.textContent = data.student.violation_count || 0;
+        }
+
+        if (activeLabChip) {
+            activeLabChip.style.display = activeSession ? '' : 'none';
+            const strong = activeLabChip.querySelector('strong');
+            if (strong) strong.textContent = activeSession ? activeSession.lab_name : '';
+        }
+
+        if (!panel) return;
+        if (activeSession) {
+            panel.innerHTML = `
+                <p class="section-kicker mb-2">Active Session</p>
+                <h4>${escapeHtml(activeSession.lab_name)}</h4>
+                <p class="muted-copy mb-3">Checked in at ${new Date(activeSession.check_in_time).toLocaleTimeString()}</p>
+                <form action="/sessions/checkout/${escapeHtml(activeSession.id)}" method="POST">
+                    <button type="submit" class="btn btn-danger w-100 btn-lg">
+                        <i class="bi bi-box-arrow-right me-2"></i>Check Out
+                    </button>
+                </form>
+            `;
+            return;
+        }
+
+        panel.innerHTML = `
+            <p class="section-kicker mb-2">No Active Session</p>
+            <p class="muted-copy mb-2">Pick a lab below to check in instantly.</p>
+        `;
+    }
+
+    async function refreshStudentDashboardState() {
+        try {
+            const response = await fetch('/api/student-dashboard-state', {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderStudentSummary(data);
+            document.dispatchEvent(new CustomEvent('student:state-update', { detail: data }));
+        } catch (error) {
+            console.warn('Student dashboard refresh failed:', error);
+        }
+    }
+
+    document.addEventListener('app:live-update', () => window.labRunAutoRefresh(refreshStudentDashboardState));
+    document.addEventListener('app:app-update', () => window.labRunAutoRefresh(refreshStudentDashboardState));
+    refreshStudentDashboardState();
+    setInterval(() => window.labRunAutoRefresh(refreshStudentDashboardState), 3000);
+});
+</script>
+
 <% if (activeSection === 'labs') { %>
 <section class="list-card p-4">
     <div class="filter-group filter-toolbar mb-3">
         <input type="text" class="form-control" placeholder="Search lab" data-filter-key="text">
     </div>
-    <div class="row g-4 filter-targets">
+    <div class="row g-4 filter-targets" id="student-labs-grid" data-role="student">
         <% labs.forEach(lab => { %>
-            <div class="col-md-6 col-xl-4 filter-item" data-filter-text="<%= `${lab.name} ${lab.location || ''}`.toLowerCase() %>">
+            <div class="col-md-6 col-xl-4 filter-item" data-filter-text="<%= `${lab.name} ${lab.location || ''}`.toLowerCase() %>" data-lab-card="<%= lab.id %>">
                 <div class="lab-card">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
                             <h4 class="mb-1"><%= lab.name %></h4>
                             <p class="lab-meta mb-0"><%= lab.location || 'Location not set' %></p>
                         </div>
-                        <span class="soft-badge <%= Number(lab.current_occupancy) > Number(lab.capacity) ? 'red' : 'teal' %>">
-                            <%= lab.current_occupancy %> / <%= lab.capacity %>
+                        <span data-lab-status-badge>
+                            <% if (lab.is_active) { %>
+                                <span class="soft-badge <%= Number(lab.current_occupancy) > Number(lab.capacity) ? 'red' : 'teal' %>">
+                                    <%= lab.current_occupancy %> / <%= lab.capacity %>
+                                </span>
+                            <% } else { %>
+                                <span class="soft-badge ink">Inactive</span>
+                            <% } %>
                         </span>
                     </div>
-                    <% if (!activeSession) { %>
-                        <form action="/sessions/checkin" method="POST">
-                            <input type="hidden" name="lab_id" value="<%= lab.id %>">
-                            <button type="submit" class="btn btn-success w-100 btn-lg">
-                                <i class="bi bi-box-arrow-in-right me-2"></i>Check In
-                            </button>
-                        </form>
-                    <% } else if (activeSession && Number(activeSession.lab_id) === Number(lab.id)) { %>
-                        <form action="/sessions/checkout/<%= activeSession.id %>" method="POST">
-                            <button type="submit" class="btn btn-danger w-100 btn-lg">
-                                <i class="bi bi-box-arrow-right me-2"></i>Check Out
-                            </button>
-                        </form>
-                    <% } else { %>
-                        <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark w-100">View Lab</a>
-                    <% } %>
+                    <div data-lab-actions></div>
                 </div>
             </div>
         <% }) %>
@@ -74,8 +135,84 @@
 </section>
 <% } %>
 
+<% if (activeSection === 'labs') { %>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const grid = document.getElementById('student-labs-grid');
+    if (!grid) return;
+    const initialLabs = <%- JSON.stringify(labs).replace(/</g, '\\u003c') %>;
+    let activeSession = window.studentDashboardActiveSession || <%- JSON.stringify(activeSession || null).replace(/</g, '\\u003c') %>;
+
+    function isActive(value) {
+        return value === true || value === 'true' || value === 't' || value === 1 || value === '1';
+    }
+
+    function renderCard(lab) {
+        const card = grid.querySelector(`[data-lab-card="${lab.id}"]`);
+        if (!card) return;
+        const active = isActive(lab.is_active);
+        const occupancy = Number(lab.current_occupancy || 0);
+        const capacity = Number(lab.capacity || 0);
+        const badge = card.querySelector('[data-lab-status-badge]');
+        const actions = card.querySelector('[data-lab-actions]');
+        if (badge) {
+            badge.innerHTML = active
+                ? `<span class="soft-badge ${occupancy > capacity ? 'red' : 'teal'}">${occupancy} / ${capacity}</span>`
+                : '<span class="soft-badge ink">Inactive</span>';
+        }
+        if (!actions) return;
+        if (activeSession && Number(activeSession.lab_id) === Number(lab.id)) {
+            actions.innerHTML = `
+                <form action="/sessions/checkout/${activeSession.id}" method="POST">
+                    <button type="submit" class="btn btn-danger w-100 btn-lg"><i class="bi bi-box-arrow-right me-2"></i>Check Out</button>
+                </form>`;
+        } else if (!active) {
+            actions.innerHTML = '<button type="button" class="btn btn-outline-dark w-100 btn-lg" disabled>Inactive</button>';
+        } else if (!activeSession) {
+            actions.innerHTML = `
+                <form action="/sessions/checkin" method="POST">
+                    <input type="hidden" name="lab_id" value="${lab.id}">
+                    <button type="submit" class="btn btn-success w-100 btn-lg"><i class="bi bi-box-arrow-in-right me-2"></i>Check In</button>
+                </form>`;
+        } else {
+            actions.innerHTML = `<a href="/labs/${lab.id}" class="btn btn-outline-dark w-100">View Lab</a>`;
+        }
+    }
+
+    function renderAll(labs) {
+        labs.forEach(renderCard);
+    }
+
+    async function refreshLabs() {
+        try {
+            const response = await fetch('/api/student-dashboard-state', {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            activeSession = data.activeSession || null;
+            renderAll(data.labs || []);
+        } catch (error) {
+            console.warn('Student labs refresh failed:', error);
+        }
+    }
+
+    renderAll(initialLabs);
+    refreshLabs();
+    document.addEventListener('student:state-update', (event) => {
+        activeSession = event.detail.activeSession || null;
+        renderAll(event.detail.labs || initialLabs);
+    });
+    document.addEventListener('app:live-update', () => window.labRunAutoRefresh(refreshLabs));
+    document.addEventListener('app:app-update', () => window.labRunAutoRefresh(refreshLabs));
+    setInterval(() => window.labRunAutoRefresh(refreshLabs), 3000);
+});
+</script>
+<% } %>
+
 <% if (activeSection === 'history') { %>
-<section class="list-card p-4">
+<section class="list-card p-4" id="dashboard-student-history">
     <% if (recentHistory.length === 0) { %>
         <p class="muted-copy mb-0">No sessions recorded yet.</p>
     <% } else { %>
@@ -114,6 +251,96 @@
         </div>
     <% } %>
 </section>
+<% } %>
+
+<% if (activeSection === 'history') { %>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const section = document.getElementById('dashboard-student-history');
+    if (!section) return;
+
+    const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    function applyFilters() {
+        const text = (section.querySelector('[data-filter-key="text"]')?.value || '').trim().toLowerCase();
+        const status = section.querySelector('[data-filter-key="status"]')?.value || '';
+        section.querySelectorAll('.filter-item').forEach((row) => {
+            const matchesText = !text || (row.dataset.filterText || '').includes(text);
+            const matchesStatus = !status || row.dataset.filterStatus === status;
+            row.style.display = matchesText && matchesStatus ? '' : 'none';
+        });
+    }
+
+    function bindFilters() {
+        section.querySelectorAll('[data-filter-key]').forEach((control) => {
+            if (control.dataset.liveBound === 'true') return;
+            control.dataset.liveBound = 'true';
+            control.addEventListener('input', applyFilters);
+            control.addEventListener('change', applyFilters);
+        });
+    }
+
+    function renderHistory(sessions) {
+        const currentText = section.querySelector('[data-filter-key="text"]')?.value || '';
+        const currentStatus = section.querySelector('[data-filter-key="status"]')?.value || '';
+        if (!sessions || sessions.length === 0) {
+            section.innerHTML = '<p class="muted-copy mb-0">No sessions recorded yet.</p>';
+            return;
+        }
+        const rows = sessions.map((session) => `
+            <tr class="filter-item" data-filter-text="${escapeHtml(String(session.lab_name || '').toLowerCase())}" data-filter-status="${escapeHtml(session.status)}">
+                <td>${escapeHtml(session.lab_name)}</td>
+                <td>${new Date(session.check_in_time).toLocaleString()}</td>
+                <td>${session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-'}</td>
+                <td>${session.duration_minutes ? `${Math.round(session.duration_minutes)} min` : '-'}</td>
+                <td><span class="soft-badge ${session.status === 'active' ? 'teal' : 'ink'}">${escapeHtml(session.status)}</span></td>
+            </tr>`).join('');
+        section.innerHTML = `
+            <div class="filter-group filter-toolbar mb-3">
+                <input type="text" class="form-control" placeholder="Search lab" data-filter-key="text" value="${escapeHtml(currentText)}">
+                <select class="form-select" data-filter-key="status">
+                    <option value="">All status</option>
+                    <option value="active" ${currentStatus === 'active' ? 'selected' : ''}>Active</option>
+                    <option value="completed" ${currentStatus === 'completed' ? 'selected' : ''}>Completed</option>
+                    <option value="auto_closed" ${currentStatus === 'auto_closed' ? 'selected' : ''}>Auto Closed</option>
+                </select>
+            </div>
+            <div class="table-responsive">
+                <table class="table app-table">
+                    <thead><tr><th>Lab</th><th>Check In</th><th>Check Out</th><th>Duration</th><th>Status</th></tr></thead>
+                    <tbody class="filter-targets">${rows}</tbody>
+                </table>
+            </div>`;
+        bindFilters();
+        applyFilters();
+    }
+
+    async function refreshHistory() {
+        try {
+            const response = await fetch('/api/my-history?limit=8', {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderHistory(data.sessions);
+        } catch (error) {
+            console.warn('Dashboard history refresh failed:', error);
+        }
+    }
+
+    bindFilters();
+    refreshHistory();
+    document.addEventListener('app:live-update', () => window.labRunAutoRefresh(refreshHistory));
+    document.addEventListener('app:app-update', () => window.labRunAutoRefresh(refreshHistory));
+    setInterval(() => window.labRunAutoRefresh(refreshHistory), 3000);
+});
+</script>
 <% } %>
 
 <%- include('../partials/footer') %>

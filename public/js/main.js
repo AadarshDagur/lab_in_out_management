@@ -1,6 +1,61 @@
 // Lab In/Out Management System - Client-side JS
 
+(() => {
+  let lastUserActivityAt = 0;
+  const activityEvents = ["scroll", "wheel", "touchmove", "keydown", "pointerdown"];
+
+  const markUserActivity = () => {
+    lastUserActivityAt = Date.now();
+  };
+
+  activityEvents.forEach((eventName) => {
+    window.addEventListener(eventName, markUserActivity, { passive: true });
+  });
+
+  function isEditing() {
+    const element = document.activeElement;
+    if (!element || element === document.body) return false;
+    const tagName = element.tagName;
+    return element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(tagName);
+  }
+
+  window.labRunAutoRefresh = async function(callback, options = {}) {
+    if (typeof callback !== "function") return;
+    const force = options.force === true;
+    const recentActivityMs = Number(options.recentActivityMs) || 1800;
+
+    if (!force) {
+      if (document.hidden) return;
+      if (isEditing()) return;
+      if (Date.now() - lastUserActivityAt < recentActivityMs) return;
+    }
+
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const activityBefore = lastUserActivityAt;
+
+    await callback();
+
+    window.requestAnimationFrame(() => {
+      if (lastUserActivityAt !== activityBefore || isEditing()) return;
+      if (Math.abs(window.scrollX - scrollX) > 2 || Math.abs(window.scrollY - scrollY) > 2) {
+        window.scrollTo(scrollX, scrollY);
+      }
+    });
+  };
+})();
+
 document.addEventListener("DOMContentLoaded", () => {
+  if (window.io && !window.labPresenceSocket) {
+    window.labPresenceSocket = window.io({ reconnection: true, reconnectionAttempts: Infinity });
+    window.labPresenceSocket.on("live-update", (payload) => {
+      document.dispatchEvent(new CustomEvent("app:live-update", { detail: payload }));
+    });
+    window.labPresenceSocket.on("app-update", (payload) => {
+      document.dispatchEvent(new CustomEvent("app:app-update", { detail: payload }));
+    });
+  }
+
   const sidebarToggle = document.getElementById("sidebarToggle");
   if (sidebarToggle) {
     const openClass = "sidebar-open";

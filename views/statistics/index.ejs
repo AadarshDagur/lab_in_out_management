@@ -5,7 +5,7 @@
         <div>
             <p class="section-kicker mb-2">Analytics</p>
             <h2 class="mb-1">Lab Statistics & Export</h2>
-            <p class="muted-copy mb-0">Capacity usage based on occupied minutes, not raw session count</p>
+            <p class="muted-copy mb-0"><%= periodMeta.label %> (<%= periodMeta.timeLabel %>) capacity usage based on occupied minutes.</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
             <div class="dropdown">
@@ -13,9 +13,9 @@
                     <i class="bi bi-cloud-arrow-down-fill me-1"></i> Export As
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="exportBtn">
-                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&format=csv"><i class="bi bi-filetype-csv me-2 text-success"></i> CSV</a></li>
-                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&format=excel"><i class="bi bi-file-earmark-excel me-2 text-success"></i> Excel</a></li>
-                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&format=pdf"><i class="bi bi-file-earmark-pdf me-2 text-danger"></i> PDF</a></li>
+                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&period=<%= selectedPeriod %>&format=csv"><i class="bi bi-filetype-csv me-2 text-success"></i> CSV</a></li>
+                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&period=<%= selectedPeriod %>&format=excel"><i class="bi bi-file-earmark-excel me-2 text-success"></i> Excel</a></li>
+                    <li><a class="dropdown-item" href="/statistics/export?from=<%= fromDate %>&to=<%= toDate %>&period=<%= selectedPeriod %>&format=pdf"><i class="bi bi-file-earmark-pdf me-2 text-danger"></i> PDF</a></li>
                 </ul>
             </div>
         </div>
@@ -25,6 +25,7 @@
 <!-- Date Filter Form -->
 <section class="list-card p-3 mb-4 bg-light">
     <form class="row g-3 align-items-end" method="GET" action="/statistics">
+        <input type="hidden" name="period" value="<%= selectedPeriod %>">
         <div class="col-md-4">
             <label class="form-label text-muted small fw-bold">From Date</label>
             <input type="date" class="form-control" name="from" id="fromDateInput" value="<%= fromDate %>">
@@ -37,6 +38,19 @@
             <button type="submit" class="btn btn-primary w-100">Apply Date Range</button>
         </div>
     </form>
+</section>
+
+<section class="list-card p-3 mb-4">
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-sm <%= selectedPeriod === 'working' ? 'btn-primary' : 'btn-outline-dark' %>" href="/statistics?from=<%= fromDate %>&to=<%= toDate %>&period=working">
+            Working Hours
+            <span class="ms-1">9 AM - 1 PM, 2 PM - 6 PM</span>
+        </a>
+        <a class="btn btn-sm <%= selectedPeriod === 'non_working' ? 'btn-primary' : 'btn-outline-dark' %>" href="/statistics?from=<%= fromDate %>&to=<%= toDate %>&period=non_working">
+            Non-Working Hours
+            <span class="ms-1">6 PM - 9 PM</span>
+        </a>
+    </div>
 </section>
 
 <!-- Lab Capacity Utilization Chart -->
@@ -63,7 +77,7 @@
                     <th class="text-center">Used</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="labUtilizationRows">
                 <% labUtilization.forEach(row => { %>
                     <tr>
                         <td><strong><%= row.lab_name %></strong></td>
@@ -88,7 +102,6 @@
     <div class="stats-section-head d-flex justify-content-between align-items-center mb-4">
         <div>
             <h4 class="mb-1">Lab Session Count</h4>
-            <p class="muted-copy mb-0">Total sessions recorded for each lab in the selected date range.</p>
         </div>
     </div>
     <div class="chart-container" style="position: relative; height: 320px; max-width: 760px; margin: 0 auto;">
@@ -104,7 +117,7 @@
                     <th class="text-center">Occupied Minutes</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="labSessionCountRows">
                 <% const sessionCountRows = [...labUtilization].sort((a, b) => Number(b.total_sessions || 0) - Number(a.total_sessions || 0)); %>
                 <% sessionCountRows.forEach(row => { %>
                     <tr>
@@ -137,7 +150,7 @@
                     <th class="text-center">Severity</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="overfillRows">
                 <% if (overfillStats && overfillStats.length > 0) { %>
                     <% overfillStats.forEach(stat => { %>
                         <tr>
@@ -202,6 +215,7 @@
     let labChart = null;
     let sessionCountChart = null;
     const labData = <%- JSON.stringify(labUtilization) %>;
+    const selectedPeriod = '<%= selectedPeriod %>';
 
     function getPercentAxisMax(values) {
         const maxValue = Math.max(...values, 0);
@@ -335,16 +349,115 @@
     buildSessionCountChart(labData);
 
     // Fetch initialization calls
+    function utilizationTone(percent) {
+        const value = Number(percent || 0);
+        if (value >= 75) return 'red';
+        if (value >= 40) return 'ink';
+        return 'teal';
+    }
+
+    function renderLabTables(data) {
+        const utilizationRows = document.getElementById('labUtilizationRows');
+        const sessionRows = document.getElementById('labSessionCountRows');
+        if (utilizationRows) {
+            utilizationRows.innerHTML = data.map(row => `
+                <tr>
+                    <td><strong>${escapeHtml(row.lab_name)}</strong></td>
+                    <td class="text-center">${row.capacity || 0}</td>
+                    <td class="text-center">${row.open_minutes || 0}</td>
+                    <td class="text-center">${row.occupied_minutes || 0}</td>
+                    <td class="text-center">${row.capacity_minutes || 0}</td>
+                    <td class="text-center">
+                        <span class="soft-badge ${utilizationTone(row.utilization_percent)}">${row.utilization_percent || 0}%</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        if (sessionRows) {
+            sessionRows.innerHTML = [...data]
+                .sort((a, b) => Number(b.total_sessions || 0) - Number(a.total_sessions || 0))
+                .map(row => `
+                    <tr>
+                        <td><strong>${escapeHtml(row.lab_name)}</strong></td>
+                        <td class="text-center">${row.total_sessions || 0}</td>
+                        <td class="text-center">${row.utilization_percent || 0}%</td>
+                        <td class="text-center">${row.occupied_minutes || 0}</td>
+                    </tr>
+                `).join('');
+        }
+    }
+
+    function renderOverfillTable(data) {
+        const rows = document.getElementById('overfillRows');
+        if (!rows) return;
+        if (!data || data.length === 0) {
+            rows.innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-muted">
+                        <i class="bi bi-shield-check display-6 d-block mb-2 text-success"></i>
+                        No overfilling incidents recorded in this period.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        rows.innerHTML = data.map(stat => {
+            const incidents = Number(stat.overfill_incidents || 0);
+            const severity = incidents > 10
+                ? '<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>High</span>'
+                : incidents > 0
+                    ? '<span class="text-warning fw-bold"><i class="bi bi-exclamation-circle-fill me-1"></i>Moderate</span>'
+                    : '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Optimal</span>';
+            return `
+                <tr>
+                    <td class="fw-bold">${escapeHtml(stat.lab_name)}</td>
+                    <td class="text-center text-muted">${stat.capacity || 0} students</td>
+                    <td class="text-center">
+                        <span class="badge ${incidents > 0 ? 'bg-danger' : 'bg-success'} rounded-pill fs-6 px-3">${incidents}</span>
+                    </td>
+                    <td class="text-center">${severity}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        })[char]);
+    }
+
     async function fetchLabUtilization() {
         const from = document.getElementById('fromDateInput').value;
         const to = document.getElementById('toDateInput').value;
         try {
-            const res = await fetch(`/statistics/api/utilization?from=${from}&to=${to}`);
+            const res = await fetch(`/statistics/api/utilization?from=${from}&to=${to}&period=${selectedPeriod}`);
             const data = await res.json();
             buildLabChart(data);
             buildSessionCountChart(data);
+            renderLabTables(data);
         } catch(e) {
             console.error('Failed to fetch lab utilization:', e);
+        }
+    }
+
+    async function fetchOverfillStats() {
+        const from = document.getElementById('fromDateInput').value;
+        const to = document.getElementById('toDateInput').value;
+        try {
+            const res = await fetch(`/statistics/api/overfill?from=${from}&to=${to}&period=${selectedPeriod}`);
+            const data = await res.json();
+            renderOverfillTable(data);
+        } catch(e) {
+            console.error('Failed to fetch overfill statistics:', e);
+        }
+    }
+
+    async function refreshStatistics() {
+        await Promise.all([fetchLabUtilization(), fetchOverfillStats()]);
+        const selector = document.getElementById('batchLabSelector');
+        if (selector) {
+            selector.dispatchEvent(new Event('change'));
         }
     }
 
@@ -400,7 +513,7 @@
         const from = document.getElementById('fromDateInput').value;
         const to = document.getElementById('toDateInput').value;
         try {
-            const res = await fetch(`/statistics/api/batch?lab_id=${this.value}&from=${from}&to=${to}`);
+            const res = await fetch(`/statistics/api/batch?lab_id=${this.value}&from=${from}&to=${to}&period=${selectedPeriod}`);
             const data = await res.json();
             buildBatchChart(data);
         } catch(e) {

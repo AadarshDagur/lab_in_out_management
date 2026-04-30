@@ -32,11 +32,15 @@ const AuditLog = {
     try {
       if (!SERIOUS_ACTIONS.includes(action)) return;
 
-      await db.query(
-        `INSERT INTO admin_audit_logs (user_id, user_name, action, target_type, target_id, details, ip_address)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [userId || null, userName || null, action, targetType || null, targetId || null, details || null, ipAddress || null]
+      const result = await db.query(
+        `INSERT INTO admin_audit_logs (user_id, user_name, action, target_type, target_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [userId || null, userName || null, action, targetType || null, targetId || null, details || null]
       );
+      if (global.__broadcastAppUpdate) {
+        global.__broadcastAppUpdate("audit-log", { log: result.rows[0] });
+      }
     } catch (err) {
       // Never let audit logging crash the app
       console.error("Audit log write failed:", err.message);

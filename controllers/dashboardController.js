@@ -4,6 +4,19 @@ const User = require("../models/userModel");
 const Entry = require("../models/entryModel");
 const exportService = require("../services/exportService");
 
+function normalizeDbBoolean(value) {
+  return value === true || value === "true" || value === "t" || value === 1 || value === "1";
+}
+
+function normalizeLabBooleans(lab) {
+  if (!lab) return lab;
+  return {
+    ...lab,
+    is_active: normalizeDbBoolean(lab.is_active),
+    manual_inactive: normalizeDbBoolean(lab.manual_inactive),
+  };
+}
+
 const dashboardController = {
   pickSection(requested, allowed, fallback) {
     return allowed.includes(requested) ? requested : fallback;
@@ -37,7 +50,7 @@ const dashboardController = {
 
     const activeSession = await LabSession.getActiveSession(req.session.user.id);
     const recentHistory = await LabSession.getUserHistory(req.session.user.id, 8);
-    let labs = await Lab.findAllWithOccupancy();
+    let labs = (await Lab.findAllWithOccupancy(false)).map(normalizeLabBooleans);
     const student = await User.findById(req.session.user.id);
 
     // Sort labs by most visited
@@ -71,7 +84,7 @@ const dashboardController = {
       "live"
     );
 
-    const labs = await Lab.findAllWithOccupancy();
+    const labs = (await Lab.findAllWithOccupancy(false)).map(normalizeLabBooleans);
     const activeSessions = await LabSession.getAllActiveSessions();
     const stats = await LabSession.getTodayStats();
     const students = await User.findStudentDirectory();
@@ -118,24 +131,25 @@ const dashboardController = {
       const format = req.query.format || "csv";
       const activeSessions = await LabSession.getAllActiveSessions();
       const exportedAt = new Date();
+      const timeStr = exportedAt.toLocaleString();
+      const titleStr = `Live Sessions as of ${timeStr}`;
       
-      const headers = ["Export Date", "Export Time", "Student", "Enrollment No", "Lab", "Check-in Time", "Duration (min)"];
+      const headers = ["Student", "Enrollment No", "Lab", "Check-in Time", "Duration (min)"];
+      
       const rows = activeSessions.length > 0
         ? activeSessions.map(s => [
-          exportedAt.toLocaleDateString(),
-          exportedAt.toLocaleTimeString(),
           s.user_name,
           s.enrollment_no || "-",
           s.lab_name,
           new Date(s.check_in_time).toLocaleString(),
           Math.max(1, Math.round((exportedAt.getTime() - new Date(s.check_in_time).getTime()) / 60000))
         ])
-        : [[exportedAt.toLocaleDateString(), exportedAt.toLocaleTimeString(), "No active sessions", "-", "-", "-", "-"]];
+        : [["No active sessions", "-", "-", "-", "-"]];
 
       const filename = `live_sessions_${exportedAt.toISOString().replace(/[:.]/g, "-")}`;
       
-      if (format === 'excel') return await exportService.exportExcel(res, filename, "Live Sessions", headers, rows);
-      if (format === 'pdf') return await exportService.exportPDF(res, filename, "Live Lab Sessions", headers, rows);
+      if (format === 'excel') return await exportService.exportExcel(res, filename, titleStr, headers, rows);
+      if (format === 'pdf') return await exportService.exportPDF(res, filename, titleStr, headers, rows);
       return exportService.exportCSV(res, filename, headers, rows);
     } catch (err) {
       console.error("Export live sessions error:", err);

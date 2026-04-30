@@ -79,8 +79,7 @@
     </div>
 </section>
 
-<!-- Socket.io and Live Client Logic -->
-<script src="/socket.io/socket.io.js"></script>
+<!-- Live Client Logic -->
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     const escapeHtml = (value) => String(value ?? "")
@@ -174,20 +173,22 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Keep polling active even when Socket.IO is unavailable on serverless hosts.
     refreshLiveData();
-    setInterval(refreshLiveData, 3000);
+    setInterval(() => window.labRunAutoRefresh(refreshLiveData), 3000);
     document.addEventListener("visibilitychange", function() {
-        if (!document.hidden) refreshLiveData();
+        if (!document.hidden) window.labRunAutoRefresh(refreshLiveData, { force: true });
     });
 
-    // WebSocket Integration for local/long-running Node deployments. Vercel
-    // serverless does not expose this Socket.IO server, so guard the client.
-    if (typeof window.io === "function") {
-        const socket = window.io({ reconnection: true, reconnectionAttempts: Infinity });
-
-        socket.on("connect", refreshLiveData);
-        socket.on("live-update", renderLiveData);
-        socket.on("connect_error", refreshLiveData);
+    if (!window.labPresenceSocket && typeof window.io === "function") {
+        window.labPresenceSocket = window.io({ reconnection: true, reconnectionAttempts: Infinity });
     }
+    if (window.labPresenceSocket) {
+        window.labPresenceSocket.on("connect", refreshLiveData);
+        window.labPresenceSocket.on("live-update", renderLiveData);
+        window.labPresenceSocket.on("connect_error", refreshLiveData);
+    }
+    document.addEventListener("app:live-update", (event) => {
+        window.labRunAutoRefresh(() => renderLiveData(event.detail));
+    });
 });
 </script>
 <% } %>
@@ -251,7 +252,11 @@ document.addEventListener("DOMContentLoaded", function() {
                             <td class="text-nowrap"><%= new Date(item.created_at).toLocaleTimeString() %></td>
                             <td><span class="soft-badge red"><%= item.violation_count %></span></td>
                             <td class="text-end">
-                                <% if (!item.locked) { %>
+                                <% if (item.removal_request_status === 'pending') { %>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled>Request Submitted</button>
+                                <% } else if (item.removal_request_status === 'rejected') { %>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" disabled>Removal Denied</button>
+                                <% } else if (!item.locked) { %>
                                     <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#requestRemovalModal" data-violation-id="<%= item.id %>" data-student-name="<%= item.user_name %>">
                                         Request Removal
                                     </button>
@@ -398,17 +403,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="modal fade" id="unauthorizedHistoryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content access-denied-modal">
-            <div class="modal-body p-4 p-md-5 text-center">
-                <div class="access-denied-icon mx-auto mb-3">
-                    <i class="bi bi-shield-lock"></i>
+        <div class="modal-content overflow-hidden border-0 shadow-lg">
+            <div class="modal-header border-0 bg-light justify-content-center pt-5 pb-0">
+                <div class="brand-mark bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="width: 80px; height: 80px; font-size: 2rem;">
+                    <i class="bi bi-shield-lock-fill"></i>
                 </div>
-                <p class="section-kicker mb-2">Restricted Record</p>
-                <h4 class="mb-2">History access is locked</h4>
-                <p class="muted-copy mb-4">
-                    You don't have permission to view this record.
+            </div>
+            <div class="modal-body p-4 p-md-5 text-center bg-light">
+                <h3 class="fw-bold mb-3">Access Denied</h3>
+                <p class="text-muted mb-4 fs-5">
+                    Your account doesn't have the required <span class="fw-bold text-dark">Statistics & Logs</span> permission to view <span id="unauthorizedStudentName" class="fw-bold text-dark">this student's</span> restricted history record.
                 </p>
-                <button type="button" class="btn btn-dark px-4" data-bs-dismiss="modal">Understood</button>
+                <div class="d-flex justify-content-center gap-3 mt-4">
+                    <button type="button" class="btn btn-dark px-5 py-2 fw-semibold" data-bs-dismiss="modal">Close</button>
+                    <a href="mailto:admin@example.com" class="btn btn-outline-secondary px-4 py-2">Contact Admin</a>
+                </div>
             </div>
         </div>
     </div>

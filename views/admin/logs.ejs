@@ -103,7 +103,7 @@ const selectedActionMeta = filters.action ? (actionMeta[filters.action] || { ico
                     <th>Details</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="auditLogRows">
                 <% if (logs.length === 0) { %>
                     <tr>
                         <td colspan="5" class="text-center text-muted py-4">No audit logs found for this period.</td>
@@ -141,5 +141,61 @@ const selectedActionMeta = filters.action ? (actionMeta[filters.action] || { ico
         </nav>
     <% } %>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.getElementById('auditLogRows');
+    if (!rows) return;
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        })[char]);
+    }
+
+    function renderLogs(logs) {
+        if (!logs.length) {
+            rows.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No audit logs found for this period.</td></tr>';
+            return;
+        }
+
+        rows.innerHTML = logs.map(log => {
+            const date = new Date(log.created_at);
+            return `
+                <tr>
+                    <td class="text-nowrap"><small>${date.toLocaleDateString()}</small></td>
+                    <td class="text-nowrap"><small>${date.toLocaleTimeString()}</small></td>
+                    <td><strong>${escapeHtml(log.user_name || 'System')}</strong></td>
+                    <td><span class="badge bg-secondary">${escapeHtml(log.action)}</span></td>
+                    <td class="audit-detail-cell">${escapeHtml(log.details || '-')}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function refreshLogs() {
+        const params = new URLSearchParams(new FormData(document.querySelector('form[action="/admin/logs"]')));
+        params.set('limit', '50');
+        try {
+            const response = await fetch(`/api/admin/logs?${params.toString()}`, {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store'
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderLogs(data.logs || []);
+        } catch (error) {
+            console.warn('Audit log refresh failed:', error);
+        }
+    }
+
+    document.addEventListener('app:app-update', (event) => {
+        if (!event.detail || event.detail.type === 'audit-log' || event.detail.type === 'violation-request') {
+            window.labRunAutoRefresh(refreshLogs);
+        }
+    });
+    setInterval(() => window.labRunAutoRefresh(refreshLogs), 3000);
+});
+</script>
 
 <%- include('../partials/footer') %>

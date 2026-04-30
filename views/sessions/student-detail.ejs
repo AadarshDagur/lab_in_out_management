@@ -50,6 +50,7 @@
         <section class="list-card p-4 h-100">
             <p class="section-kicker mb-1">Session Records</p>
             <h3 class="mb-3">Recent Lab History</h3>
+            <div id="student-detail-history-content" data-student-id="<%= student.id %>">
             <% if (sessions.length === 0) { %>
                 <p class="muted-copy mb-0">No lab sessions recorded yet.</p>
             <% } else { %>
@@ -82,6 +83,7 @@
                     </table>
                 </div>
             <% } %>
+            </div>
         </section>
     </div>
     
@@ -107,19 +109,19 @@
                     <table class="table app-table align-middle">
                         <thead>
                             <tr>
-                                <th>Violation</th>
-                                <th>Marked</th>
+                                <th>Lab</th>
+                                <th>Note</th>
+                                <th>Marked By</th>
+                                <th>Date & Time</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             <% violations.forEach(item => { %>
                                 <tr>
-                                    <td class="student-violation-detail">
-                                        <strong><%= item.lab_name %></strong>
-                                        <div class="text-break"><%= item.note || 'No note provided' %></div>
-                                        <small class="muted-copy">Marked by <%= item.marked_by_name || 'System' %></small>
-                                    </td>
+                                    <td><strong><%= item.lab_name %></strong></td>
+                                    <td class="text-break" style="max-width: 250px;"><%= item.note || 'No note provided' %></td>
+                                    <td><%= item.marked_by_name || 'System' %></td>
                                     <td class="text-nowrap">
                                         <%= new Date(item.created_at).toLocaleDateString() %><br>
                                         <span class="muted-copy"><%= new Date(item.created_at).toLocaleTimeString() %></span>
@@ -131,9 +133,15 @@
                                                     <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
                                                 </form>
                                             <% } else if (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'student+assistant') { %>
-                                                <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#requestRemovalModal" data-violation-id="<%= item.id %>" data-student-name="<%= student.name %>">
-                                                    Request Removal
-                                                </button>
+                                                <% if (item.removal_request_status === 'pending') { %>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled>Request Submitted</button>
+                                                <% } else if (item.removal_request_status === 'rejected') { %>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" disabled>Removal Denied</button>
+                                                <% } else { %>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#requestRemovalModal" data-violation-id="<%= item.id %>" data-student-name="<%= student.name %>">
+                                                        Request Removal
+                                                    </button>
+                                                <% } %>
                                             <% } %>
                                         <% } %>
                                     </td>
@@ -184,6 +192,56 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('requestRemovalForm').action = `/sessions/request-violation-removal/${violationId}`;
         });
     }
+
+    const historyContent = document.getElementById('student-detail-history-content');
+    const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    function renderStudentHistory(sessions) {
+        if (!historyContent) return;
+        if (!sessions || sessions.length === 0) {
+            historyContent.innerHTML = '<p class="muted-copy mb-0">No lab sessions recorded yet.</p>';
+            return;
+        }
+        const rows = sessions.map((session) => `
+            <tr>
+                <td>${escapeHtml(session.lab_name)}</td>
+                <td>${new Date(session.check_in_time).toLocaleString()}</td>
+                <td>${session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-'}</td>
+                <td>${session.duration_minutes ? `${Math.round(session.duration_minutes)} min` : '-'}</td>
+                <td><span class="soft-badge ${session.status === 'active' ? 'teal' : 'ink'}">${escapeHtml(session.status)}</span></td>
+            </tr>`).join('');
+        historyContent.innerHTML = `
+            <div class="table-responsive bounded-history-table">
+                <table class="table app-table">
+                    <thead><tr><th>Lab</th><th>Check In</th><th>Check Out</th><th>Duration</th><th>Status</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    async function refreshStudentHistory() {
+        if (!historyContent) return;
+        try {
+            const studentId = historyContent.dataset.studentId;
+            const response = await fetch(`/api/students/${studentId}/history?limit=50`, {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderStudentHistory(data.sessions);
+        } catch (error) {
+            console.warn('Student detail history refresh failed:', error);
+        }
+    }
+
+    refreshStudentHistory();
+    setInterval(() => window.labRunAutoRefresh(refreshStudentHistory), 3000);
 });
 </script>
 

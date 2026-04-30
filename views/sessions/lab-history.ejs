@@ -18,6 +18,7 @@
         <div class="list-card p-4">
             <p class="section-kicker mb-1">Session Records</p>
             <h3 class="mb-3">History for <%= lab.name %></h3>
+            <div id="lab-full-history-content" data-lab-id="<%= lab.id %>">
             <% if (sessions.length === 0) { %>
                 <p class="muted-copy mb-0">No sessions recorded for this lab.</p>
             <% } else { %>
@@ -69,23 +70,101 @@
                     </table>
                 </div>
             <% } %>
+            </div>
         </div>
     </div>
 </section>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('labHistorySearchInput');
-    const rows = document.querySelectorAll('#labHistoryTable .lab-history-row');
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const val = searchInput.value.trim().toLowerCase();
-            rows.forEach(row => {
-                const text = row.dataset.filterText || '';
-                row.style.display = text.includes(val) ? '' : 'none';
-            });
+    const content = document.getElementById('lab-full-history-content');
+    if (!content) return;
+    const labId = content.dataset.labId;
+    const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    const initials = (name) => (name || 'U').trim().charAt(0).toUpperCase() || 'U';
+    const avatar = (item) => item.profile_image
+        ? `<img src="${escapeHtml(item.profile_image)}" alt="${escapeHtml(item.user_name)}">`
+        : `<span>${escapeHtml(initials(item.user_name))}</span>`;
+
+    function applyFilter() {
+        const searchInput = document.getElementById('labHistorySearchInput');
+        const rows = document.querySelectorAll('#labHistoryTable .lab-history-row');
+        if (!searchInput) return;
+        const val = searchInput.value.trim().toLowerCase();
+        rows.forEach(row => {
+            const text = row.dataset.filterText || '';
+            row.style.display = text.includes(val) ? '' : 'none';
         });
     }
+
+    function bindSearch() {
+        const searchInput = document.getElementById('labHistorySearchInput');
+        if (!searchInput || searchInput.dataset.liveBound === 'true') return;
+        searchInput.dataset.liveBound = 'true';
+        searchInput.addEventListener('input', function() {
+            applyFilter();
+        });
+    }
+
+    function renderHistory(sessions) {
+        const currentSearch = document.getElementById('labHistorySearchInput')?.value || '';
+        if (!sessions || sessions.length === 0) {
+            content.innerHTML = '<p class="muted-copy mb-0">No sessions recorded for this lab.</p>';
+            return;
+        }
+        const rows = sessions.map((session, index) => `
+            <tr class="lab-history-row" data-filter-text="${escapeHtml([session.user_name, session.enrollment_no || '-', session.status].join(' ').toLowerCase())}">
+                <td>${index + 1}</td>
+                <td>
+                    <div class="user-inline">
+                        <div class="user-avatar-preview user-avatar-preview-sm">${avatar(session)}</div>
+                        <div>
+                            <strong>${escapeHtml(session.user_name)}</strong><br>
+                            <span class="muted-copy">${escapeHtml(session.enrollment_no || '-')}</span>
+                        </div>
+                    </div>
+                </td>
+                <td>${new Date(session.check_in_time).toLocaleString()}</td>
+                <td>${session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-'}</td>
+                <td>${session.duration_minutes ? `${Math.round(session.duration_minutes)} min` : '-'}</td>
+                <td><span class="soft-badge ${session.status === 'active' ? 'teal' : 'ink'}">${escapeHtml(session.status)}</span></td>
+            </tr>`).join('');
+        content.innerHTML = `
+            <div class="filter-group filter-toolbar mb-3">
+                <input type="text" id="labHistorySearchInput" class="form-control" placeholder="Search student or status" value="${escapeHtml(currentSearch)}">
+            </div>
+            <div class="table-responsive">
+                <table class="table app-table" id="labHistoryTable">
+                    <thead><tr><th>#</th><th>Student</th><th>Check In</th><th>Check Out</th><th>Duration</th><th>Status</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        bindSearch();
+        applyFilter();
+    }
+
+    async function refreshHistory() {
+        try {
+            const response = await fetch(`/api/labs/${labId}/history?limit=100`, {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderHistory(data.sessions);
+        } catch (error) {
+            console.warn('Lab history refresh failed:', error);
+        }
+    }
+
+    bindSearch();
+    refreshHistory();
+    setInterval(() => window.labRunAutoRefresh(refreshHistory), 3000);
 });
 </script>
 <%- include('../partials/footer') %>

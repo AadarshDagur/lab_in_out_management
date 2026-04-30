@@ -1,5 +1,21 @@
 const db = require("../config/db");
 
+const STAT_PERIODS = {
+  working: { windows: [["09:00", "13:00"], ["14:00", "18:00"]], label: "Working Hours" },
+  non_working: { windows: [["18:00", "21:00"]], label: "Non-Working Hours" },
+};
+
+function resolveStatsPeriod(period) {
+  return STAT_PERIODS[period] || STAT_PERIODS.working;
+}
+
+function getStatsWindowParams(period) {
+  const windows = resolveStatsPeriod(period).windows;
+  const first = windows[0] || ["00:00", "00:00"];
+  const second = windows[1] || ["00:00", "00:00"];
+  return [first[0], first[1], second[0], second[1]];
+}
+
 function getLocalTimestamp(timeZone = process.env.TIMEZONE || "Asia/Kolkata") {
   const parts = new Intl.DateTimeFormat("sv-SE", {
     timeZone,
@@ -190,14 +206,14 @@ const LabSession = {
                 l.name AS lab_name,
                 ls.check_in_time,
                 CASE
-                  WHEN l.open_time = l.close_time THEN NULL
-                  WHEN ls.check_in_time::time < l.close_time
-                    THEN ls.check_in_time::date + l.close_time
-                  ELSE ls.check_in_time::date + INTERVAL '1 day' + l.close_time
+                  WHEN ls.check_in_time::time < TIME '21:00'
+                    THEN ls.check_in_time::date + TIME '21:00'
+                  ELSE ls.check_in_time::date + INTERVAL '1 day' + TIME '21:00'
                 END AS closed_at
          FROM lab_sessions ls
          JOIN labs l ON ls.lab_id = l.id
          WHERE ls.status = 'active'
+           AND COALESCE(l.manual_active, FALSE) = FALSE
        )
        UPDATE lab_sessions ls
        SET check_out_time = candidates.closed_at,
@@ -231,7 +247,7 @@ const LabSession = {
          SELECT SUM((EXTRACT(EPOCH FROM (close_at - open_at)) / 60) * capacity) AS capacity_minutes
          FROM lab_days
        ),
-       overlaps AS (
+       session_overlaps AS (
          SELECT ld.id AS lab_id,
                 GREATEST(
                   0,
@@ -256,7 +272,7 @@ const LabSession = {
          ROUND(COALESCE(SUM(occupied_minutes), 0), 0) AS occupied_minutes,
          ROUND(COALESCE((SELECT capacity_minutes FROM availability), 0), 0) AS capacity_minutes,
          COALESCE(ROUND((SUM(occupied_minutes) / NULLIF((SELECT capacity_minutes FROM availability), 0)) * 100, 1), 0) AS utilization_percent
-       FROM overlaps`,
+       FROM session_overlaps`,
       [startDate, endDate]
     );
     return result.rows[0];
@@ -348,18 +364,21 @@ const LabSession = {
     return result.rows;
   },
 
-  async getLabUtilization(startDate, endDate) {
+  async getLabUtilization(startDate, endDate, period = "working") {
+    const windowParams = getStatsWindowParams(period);
     const result = await db.query(`
-      WITH lab_days AS (
+      WITH period_windows AS (
+        SELECT start_time, end_time
+        FROM (VALUES ($3::time, $4::time), ($5::time, $6::time)) AS w(start_time, end_time)
+        WHERE start_time < end_time
+      ),
+      lab_days AS (
         SELECT l.id, l.name, l.capacity, d::date AS service_date,
-               d::timestamp + l.open_time AS open_at,
-               CASE
-                 WHEN l.open_time = l.close_time THEN d::timestamp + INTERVAL '1 day'
-                 WHEN l.open_time < l.close_time THEN d::timestamp + l.close_time
-                 ELSE d::timestamp + INTERVAL '1 day' + l.close_time
-               END AS close_at
+               d::timestamp + pw.start_time AS open_at,
+               d::timestamp + pw.end_time AS close_at
         FROM labs l
         CROSS JOIN generate_series($1::date, $2::date, INTERVAL '1 day') d
+        CROSS JOIN period_windows pw
       ),
       availability AS (
         SELECT ld.id AS lab_id,
@@ -399,43 +418,77 @@ const LabSession = {
       FROM availability
       LEFT JOIN occupied USING (lab_id)
       ORDER BY utilization_percent DESC NULLS LAST, occupied_minutes DESC
-    `, [startDate, endDate]);
+    `, [startDate, endDate, ...windowParams]);
     return result.rows;
   },
 
-  async getBatchUtilization(labId, startDate, endDate) {
+  async getBatchUtilization(labId, startDate, endDate, period = "working") {
+    const windowParams = getStatsWindowParams(period);
     const result = await db.query(`
+      WITH period_windows AS (
+        SELECT start_time, end_time
+        FROM (VALUES ($4::time, $5::time), ($6::time, $7::time)) AS w(start_time, end_time)
+        WHERE start_time < end_time
+      ),
+      period_days AS (
+        SELECT d::date AS service_date,
+               d::timestamp + pw.start_time AS open_at,
+               d::timestamp + pw.end_time AS close_at
+        FROM generate_series($2::date, $3::date, INTERVAL '1 day') d
+        CROSS JOIN period_windows pw
+      ),
+      session_overlaps AS (
+        SELECT
+          u.enrollment_no,
+          u.department,
+          GREATEST(
+            0,
+            EXTRACT(EPOCH FROM (
+              LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), pd.close_at)
+              - GREATEST(ls.check_in_time, pd.open_at)
+            )) / 60
+          ) AS session_minutes
+        FROM period_days pd
+        JOIN lab_sessions ls
+          ON ls.lab_id = $1
+         AND ls.status IN ('active', 'completed', 'auto_closed')
+         AND ls.check_in_time < pd.close_at
+         AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > pd.open_at
+        JOIN users u ON ls.user_id = u.id
+      )
       SELECT
         CASE
-          WHEN u.enrollment_no ~ '^[0-9]{4}' THEN
-            SUBSTRING(u.enrollment_no FROM 1 FOR 4) || ' ' ||
-            UPPER(REGEXP_REPLACE(SUBSTRING(u.enrollment_no FROM 5), '[0-9]+$', ''))
-          ELSE COALESCE(u.department, 'Unknown')
+          WHEN enrollment_no ~ '^[0-9]{4}' THEN
+            SUBSTRING(enrollment_no FROM 1 FOR 4) || ' ' ||
+            UPPER(REGEXP_REPLACE(SUBSTRING(enrollment_no FROM 5), '[0-9]+$', ''))
+          ELSE COALESCE(department, 'Unknown')
         END AS batch,
-        ROUND(COALESCE(SUM(
-          EXTRACT(EPOCH FROM (
-            LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ($3::date + INTERVAL '1 day'))
-            - GREATEST(ls.check_in_time, $2::date)
-          )) / 60
-        ), 0), 0)::int AS session_minutes
-      FROM lab_sessions ls
-      JOIN users u ON ls.user_id = u.id
-      WHERE ls.lab_id = $1
-        AND ls.status IN ('active', 'completed', 'auto_closed')
-        AND ls.check_in_time < ($3::date + INTERVAL '1 day')
-        AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > $2::date
+        ROUND(COALESCE(SUM(session_minutes), 0), 0)::int AS session_minutes
+      FROM session_overlaps
       GROUP BY batch
       ORDER BY session_minutes DESC
-    `, [labId, startDate, endDate]);
+    `, [labId, startDate, endDate, ...windowParams]);
     return result.rows;
   },
 
-  async getHistoricalOverfillStats(startDate, endDate) {
+  async getHistoricalOverfillStats(startDate, endDate, period = "working") {
+    const windowParams = getStatsWindowParams(period);
     const result = await db.query(`
-      WITH RecentSessions AS (
+      WITH period_windows AS (
+        SELECT start_time, end_time
+        FROM (VALUES ($3::time, $4::time), ($5::time, $6::time)) AS w(start_time, end_time)
+        WHERE start_time < end_time
+      ),
+      RecentSessions AS (
         SELECT s1.id AS session_id, s1.lab_id, s1.check_in_time
         FROM lab_sessions s1
         WHERE s1.check_in_time >= $1::date AND s1.check_in_time < ($2::date + INTERVAL '1 day')
+          AND EXISTS (
+            SELECT 1
+            FROM period_windows pw
+            WHERE s1.check_in_time::time >= pw.start_time
+              AND s1.check_in_time::time < pw.end_time
+          )
       ),
       CheckInCounts AS (
         SELECT
@@ -458,7 +511,7 @@ const LabSession = {
       LEFT JOIN CheckInCounts c ON l.id = c.lab_id AND c.active_at_checkin >= l.capacity
       GROUP BY l.id, l.name, l.capacity
       ORDER BY overfill_incidents DESC;
-    `, [startDate, endDate]);
+    `, [startDate, endDate, ...windowParams]);
     return result.rows;
   },
 

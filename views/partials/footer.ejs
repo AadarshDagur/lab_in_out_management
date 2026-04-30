@@ -7,6 +7,41 @@
 <% } %>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+if (!window.labRunAutoRefresh) {
+  (() => {
+    let lastUserActivityAt = 0;
+    const markUserActivity = () => { lastUserActivityAt = Date.now(); };
+    ["scroll", "wheel", "touchmove", "keydown", "pointerdown"].forEach((eventName) => {
+      window.addEventListener(eventName, markUserActivity, { passive: true });
+    });
+    const isEditing = () => {
+      const element = document.activeElement;
+      if (!element || element === document.body) return false;
+      return element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName);
+    };
+    window.labRunAutoRefresh = async (callback, options = {}) => {
+      if (typeof callback !== "function") return;
+      if (!options.force) {
+        if (document.hidden || isEditing() || Date.now() - lastUserActivityAt < 1800) return;
+      }
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      const activityBefore = lastUserActivityAt;
+      await callback();
+      window.requestAnimationFrame(() => {
+        if (lastUserActivityAt !== activityBefore || isEditing()) return;
+        if (Math.abs(window.scrollX - scrollX) > 2 || Math.abs(window.scrollY - scrollY) > 2) {
+          window.scrollTo(scrollX, scrollY);
+        }
+      });
+    };
+  })();
+}
+</script>
+<% if (typeof currentUser !== 'undefined' && currentUser) { %>
+<script src="/socket.io/socket.io.js"></script>
+<% } %>
 <script src="/js/main.js"></script>
 </body>
 </html>

@@ -15,9 +15,7 @@
   --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.05);
   --radius-lg: 18px;
   --radius-md: 12px;
-  --sidebar-width: 280px;
-}
-
+    --sidebar-width: 310px;
 body {
   min-height: 100vh;
   background:

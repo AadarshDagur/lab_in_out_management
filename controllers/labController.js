@@ -3,6 +3,20 @@ const LabSession = require("../models/sessionModel");
 const User = require("../models/userModel");
 const { validationResult } = require("express-validator");
 
+function normalizeDbBoolean(value) {
+  return value === true || value === "true" || value === "t" || value === 1 || value === "1";
+}
+
+function normalizeLabBooleans(lab) {
+  if (!lab) return lab;
+  return {
+    ...lab,
+    is_active: normalizeDbBoolean(lab.is_active),
+    manual_inactive: normalizeDbBoolean(lab.manual_inactive),
+    manual_active: normalizeDbBoolean(lab.manual_active),
+  };
+}
+
 const labController = {
   async applyLabStatusChange(lab, nextIsActive, changedByUserId) {
     const shouldDeactivate = lab.is_active && nextIsActive === false;
@@ -14,12 +28,13 @@ const labController = {
     return Lab.update(lab.id, {
       is_active: nextIsActive,
       manual_inactive: !nextIsActive,
+      manual_active: nextIsActive,
     });
   },
 
   async index(req, res) {
     try {
-      const labs = await Lab.findAllWithOccupancy();
+      const labs = (await Lab.findAllWithOccupancy(false)).map(normalizeLabBooleans);
       const activeSession = req.session.user
         ? await LabSession.getActiveSession(req.session.user.id)
         : null;
@@ -33,7 +48,7 @@ const labController = {
 
   async show(req, res) {
     try {
-      const lab = await Lab.findById(req.params.id);
+      const lab = normalizeLabBooleans(await Lab.findById(req.params.id));
       if (!lab) {
         req.flash("error", "Lab not found");
         return res.redirect("/labs");
@@ -78,7 +93,7 @@ const labController = {
   // GET /labs/manage - Admin: manage labs
   async manage(req, res) {
     try {
-      const labs = await Lab.findAll(false); // include inactive
+      const labs = (await Lab.findAll(false)).map(normalizeLabBooleans); // include inactive
       res.render("labs/manage", { title: "Manage Labs", labs });
     } catch (err) {
       console.error("Error fetching labs:", err);
@@ -96,14 +111,19 @@ const labController = {
         return res.redirect("/labs/manage");
       }
 
-      const { name, location, capacity, open_time, close_time } = req.body;
+      const { name, location, capacity } = req.body;
       await Lab.create({
         name,
         location,
         capacity: parseInt(capacity),
-        open_time,
-        close_time,
       });
+
+      if (req.app.get("broadcastLiveUpdate")) {
+        await req.app.get("broadcastLiveUpdate")();
+      }
+      if (req.app.get("broadcastAppUpdate")) {
+        req.app.get("broadcastAppUpdate")("lab");
+      }
 
       // No seat creation — seats concept removed
 
@@ -119,8 +139,8 @@ const labController = {
   // PUT /labs/:id - Update lab
   async update(req, res) {
     try {
-      const { name, location, capacity, open_time, close_time, is_active } = req.body;
-      const existingLab = await Lab.findById(req.params.id);
+      const { name, location, capacity, is_active } = req.body;
+      const existingLab = normalizeLabBooleans(await Lab.findById(req.params.id));
 
       if (!existingLab) {
         req.flash("error", "Lab not found");
@@ -138,11 +158,17 @@ const labController = {
         name,
         location,
         capacity: capacity ? parseInt(capacity) : undefined,
-        open_time,
-        close_time,
         is_active: nextIsActive,
         manual_inactive: !nextIsActive,
+        manual_active: nextIsActive,
       });
+
+      if (req.app.get("broadcastLiveUpdate")) {
+        await req.app.get("broadcastLiveUpdate")();
+      }
+      if (req.app.get("broadcastAppUpdate")) {
+        req.app.get("broadcastAppUpdate")("lab", { labId: existingLab.id });
+      }
       req.flash("success", "Lab updated successfully");
       res.redirect("/labs/manage");
     } catch (err) {
@@ -154,14 +180,25 @@ const labController = {
 
   async updateStatus(req, res) {
     try {
-      const lab = await Lab.findById(req.params.id);
+      const lab = normalizeLabBooleans(await Lab.findById(req.params.id));
       if (!lab) {
         req.flash("error", "Lab not found");
         return res.redirect("/labs");
       }
 
       const requestedStatus = req.body.is_active === "true";
+      const wantsJson = req.xhr || (req.get("accept") || "").includes("application/json");
+      if (typeof req.body.is_active === "undefined") {
+        if (wantsJson) {
+          return res.status(400).json({ error: "Lab status value is required" });
+        }
+        req.flash("error", "Lab status value is required");
+        return res.redirect(req.get("Referrer") || "/labs");
+      }
       if (lab.is_active === requestedStatus) {
+        if (wantsJson) {
+          return res.json({ lab, message: requestedStatus ? "Lab is already active" : "Lab is already inactive" });
+        }
         req.flash(
           "success",
           requestedStatus ? "Lab is already active" : "Lab is already inactive"
@@ -174,10 +211,25 @@ const labController = {
         requestedStatus,
         req.session.user.id
       );
+      if (req.app.get("broadcastLiveUpdate")) {
+        await req.app.get("broadcastLiveUpdate")();
+      }
+      if (req.app.get("broadcastAppUpdate")) {
+        req.app.get("broadcastAppUpdate")("lab-status", { labId: lab.id, isActive: requestedStatus });
+      }
 
       if (requestedStatus) {
+        if (wantsJson) {
+          return res.json({ lab: normalizeLabBooleans(updatedLab), message: `${updatedLab.name} is active again` });
+        }
         req.flash("success", `${updatedLab.name} is active again`);
       } else {
+        if (wantsJson) {
+          return res.json({
+            lab: normalizeLabBooleans(updatedLab),
+            message: `${updatedLab.name} was marked inactive. Active students were checked out without violations.`,
+          });
+        }
         req.flash(
           "success",
           `${updatedLab.name} was marked inactive. Active students were checked out without violations.`
@@ -200,6 +252,12 @@ const labController = {
   async delete(req, res) {
     try {
       await Lab.delete(req.params.id);
+      if (req.app.get("broadcastLiveUpdate")) {
+        await req.app.get("broadcastLiveUpdate")();
+      }
+      if (req.app.get("broadcastAppUpdate")) {
+        req.app.get("broadcastAppUpdate")("lab");
+      }
       req.flash("success", "Lab deleted successfully");
       res.redirect("/labs/manage");
     } catch (err) {

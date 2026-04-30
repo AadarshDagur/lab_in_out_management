@@ -9,7 +9,7 @@ const path = require("path");
 const { pool } = require("./config/db");
 
 // Import middleware
-const { setLocals, isAuthenticated, disallowRoles } = require("./middleware/auth");
+const { setLocals, isAuthenticated, authorizeRoles, disallowRoles, requireStatisticsAccess } = require("./middleware/auth");
 
 // Import routes
 const authRoutes = require("./routes/authRoutes");
@@ -226,8 +226,22 @@ async function ensureViolationLockedColumn() {
 async function ensureLabManualInactiveColumn() {
   try {
     await pool.query("ALTER TABLE labs ADD COLUMN IF NOT EXISTS manual_inactive BOOLEAN DEFAULT FALSE");
+    await pool.query("ALTER TABLE labs ADD COLUMN IF NOT EXISTS manual_active BOOLEAN DEFAULT FALSE");
   } catch (error) {
-    console.error("Failed to ensure lab manual inactive column:", error.message);
+    console.error("Failed to ensure lab manual status columns:", error.message);
+  }
+}
+
+async function ensureFixedLabHours() {
+  try {
+    await pool.query(`
+      ALTER TABLE labs
+      ALTER COLUMN open_time SET DEFAULT '09:00',
+      ALTER COLUMN close_time SET DEFAULT '21:00'
+    `);
+    await pool.query("UPDATE labs SET open_time = '09:00', close_time = '21:00'");
+  } catch (error) {
+    console.error("Failed to ensure fixed lab hours:", error.message);
   }
 }
 
@@ -325,18 +339,15 @@ async function reconcileLabSchedules() {
   lastScheduleReconcileAt = now;
   scheduleReconcilePromise = (async () => {
     const LabSession = require("./models/sessionModel");
-    const Lab = require("./models/labModel");
 
     const closedSessions = await LabSession.autoClosePastScheduledClose();
-    const openedLabs = await Lab.autoOpenDuringHours();
-    const closedLabs = await Lab.autoCloseAfterHours();
 
-    if (closedSessions.length > 0 || openedLabs.length > 0 || closedLabs.length > 0) {
+    if (closedSessions.length > 0) {
       const broadcast = app.get("broadcastLiveUpdate");
       if (broadcast) await broadcast();
     }
 
-    return { closedSessions, openedLabs, closedLabs };
+    return { closedSessions, openedLabs: [], closedLabs: [] };
   })().catch((err) => {
     console.error("Request-time lab schedule reconciliation error:", err.message);
     return { closedSessions: [], openedLabs: [], closedLabs: [] };
@@ -424,6 +435,161 @@ app.get("/api/live-sessions", isAuthenticated, async (req, res) => {
   }
 });
 
+app.get("/api/labs-state", isAuthenticated, disallowRoles("admin"), async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+    const labs = await Lab.findAllWithOccupancy(false);
+    const activeSession = req.session.user
+      ? await LabSession.getActiveSession(req.session.user.id)
+      : null;
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ labs, activeSession });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch labs" });
+  }
+});
+
+app.get("/api/student-dashboard-state", isAuthenticated, authorizeRoles("student"), async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+    const User = require("./models/userModel");
+    const labs = await Lab.findAllWithOccupancy(false);
+    const activeSession = await LabSession.getActiveSession(req.session.user.id);
+    const student = await User.findById(req.session.user.id);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ labs, activeSession, student });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch student dashboard state" });
+  }
+});
+
+app.get("/api/labs/:labId/live", isAuthenticated, authorizeRoles("assistant", "admin"), async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+    const lab = await Lab.findById(req.params.labId);
+    if (!lab) return res.status(404).json({ error: "Lab not found" });
+
+    const activeSessions = await LabSession.getActiveSessions(lab.id);
+    const recentHistory = await LabSession.getLabHistory(lab.id, 10);
+    const occupancy = await Lab.getOccupancy(lab.id);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ lab, activeSessions, recentHistory, occupancy });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch lab live data" });
+  }
+});
+
+app.get("/api/my-history", isAuthenticated, authorizeRoles("student"), async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const sessions = await LabSession.getUserHistory(req.session.user.id, limit);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+app.get("/api/labs/:labId/history", isAuthenticated, authorizeRoles("assistant", "admin"), requireStatisticsAccess, async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const Lab = require("./models/labModel");
+    const lab = await Lab.findById(req.params.labId);
+    if (!lab) return res.status(404).json({ error: "Lab not found" });
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const sessions = await LabSession.getLabHistory(lab.id, limit);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch lab history" });
+  }
+});
+
+app.get("/api/students/:studentId/history", isAuthenticated, authorizeRoles("assistant", "admin"), requireStatisticsAccess, async (req, res) => {
+  try {
+    const LabSession = require("./models/sessionModel");
+    const User = require("./models/userModel");
+    const student = await User.findById(req.params.studentId);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+    const sessions = await LabSession.getUserHistory(student.id, limit);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch student history" });
+  }
+});
+
+app.get("/api/admin/logs", isAuthenticated, authorizeRoles("admin"), async (req, res) => {
+  try {
+    const AuditLog = require("./models/auditLogModel");
+    const selectedAction =
+      typeof req.query.action_choice !== "undefined"
+        ? req.query.action_choice
+        : req.query.action;
+    const filters = {
+      from: req.query.from || "",
+      to: req.query.to || "",
+      action: selectedAction || "",
+      user: req.query.user || "",
+      q: req.query.q || "",
+    };
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const logs = await AuditLog.findFiltered(filters, limit, 0);
+    const totalLogs = await AuditLog.countFiltered(filters);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ logs, totalLogs });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch audit logs" });
+  }
+});
+
+app.get("/api/admin/violation-requests", isAuthenticated, authorizeRoles("admin"), async (req, res) => {
+  try {
+    const ViolationRequest = require("./models/violationRequestModel");
+    const requests = await ViolationRequest.findPending();
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ requests });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch violation requests" });
+  }
+});
+
+app.get("/api/admin/labs", isAuthenticated, authorizeRoles("admin"), async (req, res) => {
+  try {
+    const Lab = require("./models/labModel");
+    const labs = await Lab.findAll(false);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.json({ labs });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch labs" });
+  }
+});
+
 // =========================
 // WebSocket
 // =========================
@@ -460,8 +626,14 @@ async function broadcastLiveUpdate() {
   }
 }
 
+function broadcastAppUpdate(type, payload = {}) {
+  io.emit("app-update", { type, ...payload, timestamp: new Date().toISOString() });
+}
+
 // Make broadcastLiveUpdate accessible
 app.set("broadcastLiveUpdate", broadcastLiveUpdate);
+app.set("broadcastAppUpdate", broadcastAppUpdate);
+global.__broadcastAppUpdate = broadcastAppUpdate;
 
 // =========================
 // Error Handling
@@ -507,6 +679,7 @@ function ensureAppReady() {
       await ensureCanViewStatisticsColumn();
       await ensureViolationLockedColumn();
       await ensureLabManualInactiveColumn();
+      await ensureFixedLabHours();
       await ensureViolationRemovalRequestsTable();
       await ensureAuditLogsTable();
       
@@ -522,10 +695,9 @@ function ensureAppReady() {
             console.log(`[Auto-Close] Automatically closed ${closed.length} stale sessions from yesterday.`);
         }
 
-        // Setup periodic lab closing/opening
+        // Keep active sessions aligned with the scheduled 9 PM close time.
         setInterval(async () => {
           try {
-            const Lab = require("./models/labModel");
             const LabSession = require("./models/sessionModel");
             const scheduledClosed = await LabSession.autoClosePastScheduledClose();
             if (scheduledClosed && scheduledClosed.length > 0) {
@@ -533,17 +705,6 @@ function ensureAppReady() {
                 broadcastLiveUpdate();
             }
 
-            const opened = await Lab.autoOpenDuringHours();
-            if (opened && opened.length > 0) {
-                console.log(`[Auto-Open] Automatically opened ${opened.length} labs for the day.`);
-                broadcastLiveUpdate();
-            }
-
-            const closedLabs = await Lab.autoCloseAfterHours();
-            if (closedLabs && closedLabs.length > 0) {
-                console.log(`[Auto-Close] Automatically closed ${closedLabs.length} labs and checked out all active students inside.`);
-                broadcastLiveUpdate();
-            }
           } catch(e) {
             console.error("Periodic lab status update error:", e);
           }

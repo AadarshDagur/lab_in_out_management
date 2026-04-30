@@ -5,17 +5,18 @@
         <div>
             <p class="section-kicker mb-2">Lab Record</p>
             <h2 class="mb-2"><%= lab.name %></h2>
-            <span class="soft-badge <%= lab.is_active ? 'teal' : 'ink' %>"><%= lab.is_active ? 'Active' : 'Inactive' %></span>
+            <span id="lab-status-badge" class="soft-badge <%= lab.is_active ? 'teal' : 'ink' %>"><%= lab.is_active ? 'Active' : 'Inactive' %></span>
         </div>
         <div class="d-flex flex-column align-items-start align-items-lg-end gap-2">
             <div class="info-strip">
-                <span class="info-chip">Occupancy <strong><%= occupancy %> / <%= lab.capacity %></strong></span>
+                <span class="info-chip">Occupancy <strong><span id="lab-occupancy-count" data-live-occupancy><%= occupancy %></span> / <%= lab.capacity %></strong></span>
             </div>
             <% if (currentUser && (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'admin')) { %>
-                <form action="/labs/<%= lab.id %>/status" method="POST">
+                <form action="/labs/<%= lab.id %>/status" method="POST" id="lab-status-form" class="live-lab-status-form">
                     <input type="hidden" name="is_active" value="<%= lab.is_active ? 'false' : 'true' %>">
                     <button
                         type="submit"
+                        id="lab-status-button"
                         class="btn btn-<%= lab.is_active ? 'warning' : 'success' %>"
                         onclick="return confirm('<%= lab.is_active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?' %>')"
                     >
@@ -27,13 +28,11 @@
     </div>
 </section>
 
-<% if (!lab.is_active) { %>
-<section class="list-card p-4 mb-4 border border-warning border-opacity-25">
+<section class="list-card p-4 mb-4 border border-warning border-opacity-25" id="lab-inactive-notice" style="<%= lab.is_active ? 'display:none;' : '' %>">
     <p class="section-kicker mb-1">Lab Status</p>
     <h3 class="mb-2">This lab is inactive</h3>
     <p class="muted-copy mb-0">New check-ins are disabled until the lab is reactivated.</p>
 </section>
-<% } %>
 
 <section class="mb-4">
     <div>
@@ -64,8 +63,8 @@
                 <% } %>
             </div>
         <% } %>
-        <% if (currentUser && currentUser.activeRole === 'assistant' && lab.is_active) { %>
-            <div class="list-card p-4 mb-4">
+        <% if (currentUser && currentUser.activeRole === 'assistant') { %>
+            <div class="list-card p-4 mb-4" id="mark-missing-entry-card" style="<%= lab.is_active ? '' : 'display:none;' %>">
                 <p class="section-kicker mb-1">Mark Missing Entry</p>
                 <h3 class="mb-3">Mark Missing Entry</h3>
                 <form action="/sessions/mark-violation" method="POST" class="row g-3" id="markMissingEntryForm">
@@ -317,61 +316,63 @@
             });
             </script>
             </div>
-        <div class="list-card p-4">
+        <div class="list-card p-4" id="lab-active-sessions-card" data-lab-id="<%= lab.id %>" data-can-manage="<%= currentUser.activeRole === 'assistant' ? 'true' : 'false' %>">
             <p class="section-kicker mb-1">Active Students</p>
             <h3 class="mb-3">Current entries</h3>
-            <% if (activeSessions.length === 0) { %>
-                <p class="muted-copy mb-0">No active sessions in this lab.</p>
-            <% } else { %>
-                <div class="table-responsive">
-                    <table class="table app-table">
-                        <thead>
-                            <tr>
-                                <th>Student</th>
-                                <th>Check In</th>
-                                <th>Duration</th>
-                                <% if (currentUser.activeRole === 'assistant') { %>
-                                    <th></th>
-                                <% } %>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% activeSessions.forEach(session => { %>
-                                <% const minutes = Math.max(1, Math.round((Date.now() - new Date(session.check_in_time).getTime()) / 60000)); %>
+            <div id="lab-active-sessions-content">
+                <% if (activeSessions.length === 0) { %>
+                    <p class="muted-copy mb-0">No active sessions in this lab.</p>
+                <% } else { %>
+                    <div class="table-responsive">
+                        <table class="table app-table">
+                            <thead>
                                 <tr>
-                                    <td>
-                                        <div class="user-inline">
-                                            <div class="user-avatar-preview user-avatar-preview-sm">
-                                                <% if (session.profile_image) { %>
-                                                    <img src="<%= session.profile_image %>" alt="<%= session.user_name %>">
-                                                <% } else { %>
-                                                    <span><%= (session.user_name || 'U').trim().charAt(0).toUpperCase() %></span>
-                                                <% } %>
-                                            </div>
-                                            <div>
-                                                <strong><%= session.user_name %></strong><br>
-                                                <span class="muted-copy"><%= session.enrollment_no %></span>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td><%= new Date(session.check_in_time).toLocaleTimeString() %></td>
-                                    <td><span class="soft-badge ink duration-pill"><%= minutes %> min</span></td>
+                                    <th>Student</th>
+                                    <th>Check In</th>
+                                    <th>Duration</th>
                                     <% if (currentUser.activeRole === 'assistant') { %>
-                                        <td>
-                                            <form action="/sessions/mark-violation" method="POST">
-                                                <input type="hidden" name="case_type" value="false_entry">
-                                                <input type="hidden" name="lab_id" value="<%= lab.id %>">
-                                                <input type="hidden" name="user_id" value="<%= session.user_id %>">
-                                                <button type="submit" class="btn btn-danger btn-sm">Check Out</button>
-                                            </form>
-                                        </td>
+                                        <th></th>
                                     <% } %>
                                 </tr>
-                            <% }) %>
-                        </tbody>
-                    </table>
-                </div>
-            <% } %>
+                            </thead>
+                            <tbody>
+                                <% activeSessions.forEach(session => { %>
+                                    <% const minutes = Math.max(1, Math.round((Date.now() - new Date(session.check_in_time).getTime()) / 60000)); %>
+                                    <tr>
+                                        <td>
+                                            <div class="user-inline">
+                                                <div class="user-avatar-preview user-avatar-preview-sm">
+                                                    <% if (session.profile_image) { %>
+                                                        <img src="<%= session.profile_image %>" alt="<%= session.user_name %>">
+                                                    <% } else { %>
+                                                        <span><%= (session.user_name || 'U').trim().charAt(0).toUpperCase() %></span>
+                                                    <% } %>
+                                                </div>
+                                                <div>
+                                                    <strong><%= session.user_name %></strong><br>
+                                                    <span class="muted-copy"><%= session.enrollment_no %></span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td><%= new Date(session.check_in_time).toLocaleTimeString() %></td>
+                                        <td><span class="soft-badge ink duration-pill"><%= minutes %> min</span></td>
+                                        <% if (currentUser.activeRole === 'assistant') { %>
+                                            <td>
+                                                <form action="/sessions/mark-violation" method="POST">
+                                                    <input type="hidden" name="case_type" value="false_entry">
+                                                    <input type="hidden" name="lab_id" value="<%= lab.id %>">
+                                                    <input type="hidden" name="user_id" value="<%= session.user_id %>">
+                                                    <button type="submit" class="btn btn-danger btn-sm">Check Out</button>
+                                                </form>
+                                            </td>
+                                        <% } %>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                <% } %>
+            </div>
         </div>
         <% } %>
     </div>
@@ -392,6 +393,7 @@
             <% } %>
         <% } %>
     </div>
+    <div id="lab-recent-history-content">
     <% if (recentHistory.length === 0) { %>
         <p class="muted-copy mb-0">No sessions recorded for this lab.</p>
     <% } else { %>
@@ -432,7 +434,194 @@
             </table>
         </div>
     <% } %>
+    </div>
 </section>
+<% } %>
+
+<% if (currentUser && (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'admin')) { %>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const activeCard = document.getElementById('lab-active-sessions-card');
+    const activeContent = document.getElementById('lab-active-sessions-content');
+    const historyContent = document.getElementById('lab-recent-history-content');
+    const occupancyCount = document.getElementById('lab-occupancy-count');
+    if (!activeCard && !historyContent && !occupancyCount) return;
+
+    const labId = activeCard?.dataset.labId || '<%= lab.id %>';
+    const canManage = activeCard?.dataset.canManage === 'true';
+    const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    const initials = (name) => (name || 'U').trim().charAt(0).toUpperCase() || 'U';
+    const avatar = (item) => item.profile_image
+        ? `<img src="${escapeHtml(item.profile_image)}" alt="${escapeHtml(item.user_name)}">`
+        : `<span>${escapeHtml(initials(item.user_name))}</span>`;
+
+    function renderActiveSessions(sessions) {
+        if (!activeContent) return;
+        if (!sessions || sessions.length === 0) {
+            activeContent.innerHTML = '<p class="muted-copy mb-0">No active sessions in this lab.</p>';
+            return;
+        }
+        const actionHeader = canManage ? '<th></th>' : '';
+        const rows = sessions.map((session) => {
+            const checkInTime = new Date(session.check_in_time);
+            const minutes = Math.max(1, Math.round((Date.now() - checkInTime.getTime()) / 60000));
+            const actionCell = canManage ? `
+                <td>
+                    <form action="/sessions/mark-violation" method="POST">
+                        <input type="hidden" name="case_type" value="false_entry">
+                        <input type="hidden" name="lab_id" value="${escapeHtml(labId)}">
+                        <input type="hidden" name="user_id" value="${escapeHtml(session.user_id)}">
+                        <button type="submit" class="btn btn-danger btn-sm">Check Out</button>
+                    </form>
+                </td>` : '';
+            return `
+                <tr>
+                    <td>
+                        <div class="user-inline">
+                            <div class="user-avatar-preview user-avatar-preview-sm">${avatar(session)}</div>
+                            <div>
+                                <strong>${escapeHtml(session.user_name)}</strong><br>
+                                <span class="muted-copy">${escapeHtml(session.enrollment_no || '-')}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>${checkInTime.toLocaleTimeString()}</td>
+                    <td><span class="soft-badge ink duration-pill">${minutes} min</span></td>
+                    ${actionCell}
+                </tr>`;
+        }).join('');
+        activeContent.innerHTML = `
+            <div class="table-responsive">
+                <table class="table app-table">
+                    <thead><tr><th>Student</th><th>Check In</th><th>Duration</th>${actionHeader}</tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    function renderRecentHistory(sessions) {
+        if (!historyContent) return;
+        if (!sessions || sessions.length === 0) {
+            historyContent.innerHTML = '<p class="muted-copy mb-0">No sessions recorded for this lab.</p>';
+            return;
+        }
+        const rows = sessions.map((session) => `
+            <tr>
+                <td>
+                    <div class="user-inline">
+                        <div class="user-avatar-preview user-avatar-preview-sm">${avatar(session)}</div>
+                        <div>
+                            <strong>${escapeHtml(session.user_name)}</strong><br>
+                            <span class="muted-copy">${escapeHtml(session.enrollment_no || '-')}</span>
+                        </div>
+                    </div>
+                </td>
+                <td>${new Date(session.check_in_time).toLocaleString()}</td>
+                <td>${session.check_out_time ? new Date(session.check_out_time).toLocaleString() : '-'}</td>
+                <td><span class="soft-badge ${session.status === 'active' ? 'teal' : 'ink'}">${escapeHtml(session.status)}</span></td>
+            </tr>`).join('');
+        historyContent.innerHTML = `
+            <div class="table-responsive">
+                <table class="table app-table">
+                    <thead><tr><th>Student</th><th>Check In</th><th>Check Out</th><th>Status</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    async function refreshLabLiveData() {
+        try {
+            const response = await fetch(`/api/labs/${labId}/live`, {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            renderLabStatus(data.lab);
+            renderActiveSessions(data.activeSessions);
+            const liveOccupancy = Array.isArray(data.activeSessions)
+                ? data.activeSessions.length
+                : Number(data.occupancy || 0);
+            document.querySelectorAll('[data-live-occupancy]').forEach((node) => {
+                node.textContent = liveOccupancy;
+            });
+            renderRecentHistory(data.recentHistory);
+        } catch (error) {
+            console.warn('Lab live refresh failed:', error);
+        }
+    }
+
+    refreshLabLiveData();
+    setInterval(() => window.labRunAutoRefresh(refreshLabLiveData), 3000);
+
+    function isActive(value) {
+        return value === true || value === 'true' || value === 't' || value === 1 || value === '1';
+    }
+
+    function renderLabStatus(lab) {
+        if (!lab) return;
+        const active = isActive(lab.is_active);
+        const badge = document.getElementById('lab-status-badge');
+        const form = document.getElementById('lab-status-form');
+        const button = document.getElementById('lab-status-button');
+        const notice = document.getElementById('lab-inactive-notice');
+        const missingEntryCard = document.getElementById('mark-missing-entry-card');
+        if (badge) {
+            badge.className = `soft-badge ${active ? 'teal' : 'ink'}`;
+            badge.textContent = active ? 'Active' : 'Inactive';
+        }
+        if (form) {
+            const input = form.querySelector('input[name="is_active"]');
+            if (input) input.value = active ? 'false' : 'true';
+        }
+        if (button) {
+            button.className = `btn btn-${active ? 'warning' : 'success'}`;
+            button.textContent = active ? 'Mark Lab Inactive' : 'Reactivate Lab';
+            button.setAttribute(
+                'onclick',
+                `return confirm('${active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?'}')`
+            );
+        }
+        if (notice) {
+            notice.style.display = active ? 'none' : '';
+        }
+        if (missingEntryCard) {
+            missingEntryCard.style.display = active ? '' : 'none';
+        }
+    }
+
+    document.addEventListener('submit', async function(event) {
+        const form = event.target.closest('.live-lab-status-form');
+        if (!form) return;
+        event.preventDefault();
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new URLSearchParams(new FormData(form)),
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+            });
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok || !contentType.includes('application/json')) {
+                throw new Error('Lab status update did not return JSON');
+            }
+            const data = await response.json();
+            renderLabStatus(data.lab);
+            refreshLabLiveData();
+        } catch (error) {
+            form.submit();
+        }
+    });
+});
+</script>
 <% } %>
 
 <%- include('../partials/footer') %>

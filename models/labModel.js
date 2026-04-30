@@ -1,6 +1,12 @@
 const db = require("../config/db");
 
+const LAB_OPEN_TIME = "09:00";
+const LAB_CLOSE_TIME = "21:00";
+
 const Lab = {
+  LAB_OPEN_TIME,
+  LAB_CLOSE_TIME,
+
   async findAll(activeOnly = true) {
     let query = "SELECT * FROM labs";
     if (activeOnly) query += " WHERE is_active = TRUE";
@@ -14,7 +20,7 @@ const Lab = {
     return result.rows[0];
   },
 
-  async create({ name, location, capacity, open_time, close_time }) {
+  async create({ name, location, capacity }) {
     const result = await db.query(
       `INSERT INTO labs (name, location, capacity, open_time, close_time)
        VALUES ($1, $2, $3, $4, $5)
@@ -23,22 +29,23 @@ const Lab = {
         name,
         location,
         capacity || 30,
-        open_time || "08:00",
-        close_time || "18:00",
+        LAB_OPEN_TIME,
+        LAB_CLOSE_TIME,
       ]
     );
     return result.rows[0];
   },
 
-  async update(id, { name, location, capacity, open_time, close_time, is_active, manual_inactive }) {
+  async update(id, { name, location, capacity, is_active, manual_inactive, manual_active }) {
     const result = await db.query(
       `UPDATE labs SET name = COALESCE($1, name), location = COALESCE($2, location),
-       capacity = COALESCE($3, capacity), open_time = COALESCE($4, open_time),
-       close_time = COALESCE($5, close_time), is_active = COALESCE($6, is_active),
+       capacity = COALESCE($3, capacity), open_time = $4,
+       close_time = $5, is_active = COALESCE($6, is_active),
        manual_inactive = COALESCE($7, manual_inactive),
+       manual_active = COALESCE($8, manual_active),
        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8 RETURNING *`,
-      [name, location, capacity, open_time, close_time, is_active, manual_inactive, id]
+       WHERE id = $9 RETURNING *`,
+      [name, location, capacity, LAB_OPEN_TIME, LAB_CLOSE_TIME, is_active, manual_inactive, manual_active, id]
     );
     return result.rows[0];
   },
@@ -57,7 +64,8 @@ const Lab = {
     return parseInt(result.rows[0].current_count);
   },
 
-  async findAllWithOccupancy() {
+  async findAllWithOccupancy(activeOnly = true) {
+    const activeFilter = activeOnly ? "WHERE l.is_active = TRUE" : "";
     const result = await db.query(`
       SELECT l.*,
         COALESCE(s.active_count, 0) AS current_occupancy
@@ -68,87 +76,18 @@ const Lab = {
         WHERE status = 'active'
         GROUP BY lab_id
       ) s ON l.id = s.lab_id
-      WHERE l.is_active = TRUE
+      ${activeFilter}
       ORDER BY l.name ASC
     `);
     return result.rows;
   },
 
   async autoCloseAfterHours() {
-    try {
-      const tz = process.env.TIMEZONE || 'Asia/Kolkata';
-      const formatter = new Intl.DateTimeFormat('en-GB', {
-        timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-      });
-      const localTime = formatter.format(new Date());
-
-      const result = await db.query(
-        `WITH ClosedLabs AS (
-           UPDATE labs
-           SET is_active = FALSE
-           WHERE is_active = TRUE
-             AND NOT (
-               CASE
-                 WHEN open_time < close_time
-                   THEN open_time <= $1::time AND $1::time < close_time
-                 WHEN open_time > close_time
-                   THEN open_time <= $1::time OR $1::time < close_time
-                 ELSE TRUE
-               END
-             )
-           RETURNING id, name
-         ),
-         ClosedSessions AS (
-           UPDATE lab_sessions ls
-           SET check_out_time = CURRENT_TIMESTAMP,
-               status = 'auto_closed',
-               duration_minutes = ROUND(CAST(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ls.check_in_time)) / 60 AS NUMERIC))
-           FROM ClosedLabs cl
-           WHERE ls.lab_id = cl.id AND ls.status = 'active'
-           RETURNING ls.id
-         )
-         SELECT id, name FROM ClosedLabs;`,
-        [localTime]
-      );
-      
-      return result.rows;
-    } catch (e) {
-      console.error("Auto Close After Hours Error:", e);
-      return [];
-    }
+    return [];
   },
 
   async autoOpenDuringHours() {
-    try {
-      const tz = process.env.TIMEZONE || 'Asia/Kolkata';
-      const formatter = new Intl.DateTimeFormat('en-GB', {
-        timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-      });
-      const localTime = formatter.format(new Date());
-
-      const result = await db.query(
-        `UPDATE labs
-         SET is_active = TRUE
-         WHERE is_active = FALSE
-           AND COALESCE(manual_inactive, FALSE) = FALSE
-           AND (
-             CASE
-               WHEN open_time < close_time
-                 THEN open_time <= $1::time AND $1::time < close_time
-               WHEN open_time > close_time
-                 THEN open_time <= $1::time OR $1::time < close_time
-               ELSE TRUE
-             END
-           )
-         RETURNING id, name;`,
-        [localTime]
-      );
-      
-      return result.rows;
-    } catch (e) {
-      console.error("Auto Open During Hours Error:", e);
-      return [];
-    }
+    return [];
   },
 };
 

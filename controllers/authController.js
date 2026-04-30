@@ -100,17 +100,6 @@ const authController = {
 
   // POST /auth/logout
   async logout(req, res) {
-    if (req.session.user) {
-      await AuditLog.log({
-        userId: req.session.user.id,
-        userName: req.session.user.name,
-        action: "LOGOUT",
-        targetType: "user",
-        targetId: req.session.user.id,
-        details: null,
-        ipAddress: req.ip,
-      });
-    }
     req.session = null;
     res.redirect("/auth/login");
   },
@@ -132,16 +121,6 @@ const authController = {
       const newActive = currentActive === "student" ? "assistant" : "student";
 
       req.session.user.activeRole = newActive;
-
-      await AuditLog.log({
-        userId: user.id,
-        userName: user.name,
-        action: "SWITCH_ROLE",
-        targetType: "user",
-        targetId: user.id,
-        details: `Switched from ${currentActive} to ${newActive}`,
-        ipAddress: req.ip,
-      });
 
       req.flash("success", `Switched to ${newActive} mode`);
       return res.redirect(newActive === "admin" ? "/labs/manage" : "/dashboard");

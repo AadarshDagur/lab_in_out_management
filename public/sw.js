@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lab-manager-v2';
+const CACHE_NAME = 'lab-manager-v3';
 const STATIC_ASSETS = [
   '/css/style.css',
   '/js/main.js',
