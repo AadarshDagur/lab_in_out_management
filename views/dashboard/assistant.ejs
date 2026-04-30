@@ -172,18 +172,22 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // WebSocket Integration with API fallback. The fallback keeps the dashboard
-    // fresh even when Socket.IO is blocked by a proxy or a stale browser state.
-    const socket = io({ reconnection: true, reconnectionAttempts: Infinity });
-    
-    socket.on("connect", refreshLiveData);
-    socket.on("live-update", renderLiveData);
-    socket.on("connect_error", refreshLiveData);
-
-    setInterval(refreshLiveData, 5000);
+    // Keep polling active even when Socket.IO is unavailable on serverless hosts.
+    refreshLiveData();
+    setInterval(refreshLiveData, 3000);
     document.addEventListener("visibilitychange", function() {
         if (!document.hidden) refreshLiveData();
     });
+
+    // WebSocket Integration for local/long-running Node deployments. Vercel
+    // serverless does not expose this Socket.IO server, so guard the client.
+    if (typeof window.io === "function") {
+        const socket = window.io({ reconnection: true, reconnectionAttempts: Infinity });
+
+        socket.on("connect", refreshLiveData);
+        socket.on("live-update", renderLiveData);
+        socket.on("connect_error", refreshLiveData);
+    }
 });
 </script>
 <% } %>

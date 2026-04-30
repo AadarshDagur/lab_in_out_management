@@ -415,6 +415,9 @@ app.get("/api/live-sessions", isAuthenticated, async (req, res) => {
     const activeSessions = await LabSession.getAllActiveSessions();
     const stats = await LabSession.getTodayStats();
     const labs = await Lab.findAllWithOccupancy();
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
     res.json({ activeSessions, stats, labs });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch live data" });
