@@ -55,7 +55,7 @@ const sessionController = {
 
       // Broadcast update
       if (req.app.get("broadcastLiveUpdate")) {
-        req.app.get("broadcastLiveUpdate")();
+        await req.app.get("broadcastLiveUpdate")();
       }
 
       const user = await User.findById(targetUserId);
@@ -97,7 +97,7 @@ const sessionController = {
       }
 
       if (req.app.get("broadcastLiveUpdate")) {
-        req.app.get("broadcastLiveUpdate")();
+        await req.app.get("broadcastLiveUpdate")();
       }
 
       req.flash(
@@ -123,7 +123,7 @@ const sessionController = {
       await LabSession.checkOut(activeSession.id, req.session.user.id);
       
       if (req.app.get("broadcastLiveUpdate")) {
-        req.app.get("broadcastLiveUpdate")();
+        await req.app.get("broadcastLiveUpdate")();
       }
 
       req.flash("success", "Student checked out successfully");
@@ -342,7 +342,7 @@ const sessionController = {
       }
 
       if (req.app.get("broadcastLiveUpdate")) {
-        req.app.get("broadcastLiveUpdate")();
+        await req.app.get("broadcastLiveUpdate")();
       }
 
       await AuditLog.log({

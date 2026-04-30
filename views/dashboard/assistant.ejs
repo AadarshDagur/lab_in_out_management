@@ -98,12 +98,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }, 1000);
     }
 
-    // WebSocket Integration
-    const socket = io();
-    
-    socket.on('live-update', function(data) {
-        console.log("Live update received:", data);
-        
+    function renderLiveData(data) {
         // Update stats
         if (data.stats) {
             document.getElementById("stats-active").textContent = data.stats.currently_active || 0;
@@ -162,6 +157,32 @@ document.addEventListener("DOMContentLoaded", function() {
             });
             tbody.innerHTML = newHtml;
         }
+    }
+
+    async function refreshLiveData() {
+        try {
+            const response = await fetch("/api/live-sessions", {
+                headers: { "Accept": "application/json" },
+                cache: "no-store",
+            });
+            if (!response.ok) return;
+            renderLiveData(await response.json());
+        } catch (error) {
+            console.warn("Live data refresh failed:", error);
+        }
+    }
+
+    // WebSocket Integration with API fallback. The fallback keeps the dashboard
+    // fresh even when Socket.IO is blocked by a proxy or a stale browser state.
+    const socket = io({ reconnection: true, reconnectionAttempts: Infinity });
+    
+    socket.on("connect", refreshLiveData);
+    socket.on("live-update", renderLiveData);
+    socket.on("connect_error", refreshLiveData);
+
+    setInterval(refreshLiveData, 5000);
+    document.addEventListener("visibilitychange", function() {
+        if (!document.hidden) refreshLiveData();
     });
 });
 </script>
