@@ -218,7 +218,7 @@
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <form action="/users/<%= user.id %>?_method=DELETE" method="POST" class="d-inline"
-                                                  onsubmit="return confirm('Delete this admin?')">
+                                                  onsubmit="return window.confirmAction(event, 'Delete this admin?')">
                                                 <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                             </form>
                                         <% } else { %>
@@ -290,7 +290,7 @@
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         <form action="/users/<%= user.id %>?_method=DELETE" method="POST" class="d-inline"
-                                              onsubmit="return confirm('Delete this assistant?')">
+                                              onsubmit="return window.confirmAction(event, 'Delete this assistant?')">
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </td>
@@ -363,7 +363,7 @@
                                     </td>
                                     <td>
                                         <% if (!user.is_active && user.suspended_until) { %>
-                                            <form action="/users/<%= user.id %>/reactivate" method="POST" class="d-inline" data-confirm="Reactivate this student and reset violation count to 0?" onsubmit="return confirm('Reactivate this student and reset violation count to 0?')">
+                                            <form action="/users/<%= user.id %>/reactivate" method="POST" class="d-inline" onsubmit="return window.confirmAction(event, 'Reactivate this student and reset violation count to 0?')">
                                                 <button type="submit" class="btn btn-sm btn-outline-success" data-bs-toggle="tooltip" title="Early Reactivate">
                                                     <i class="bi bi-arrow-counterclockwise"></i>
                                                 </button>
@@ -373,7 +373,7 @@
                                             <i class="bi bi-pencil"></i>
                                         </button>
                                         <form action="/users/<%= user.id %>?_method=DELETE" method="POST" class="d-inline"
-                                              onsubmit="return confirm('Delete this student?')">
+                                              onsubmit="return window.confirmAction(event, 'Delete this student?')">
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </td>
@@ -494,7 +494,7 @@
                     fileInfo.classList.remove('d-none');
                     uploadBtn.disabled = false;
                 } else {
-                    alert('Please select a valid CSV file.');
+                    window.showAlert('Please select a valid CSV file.', 'error');
                     fileInput.value = '';
                     fileInfo.classList.add('d-none');
                     uploadBtn.disabled = true;

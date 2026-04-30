@@ -18,7 +18,7 @@
                         type="submit"
                         id="lab-status-button"
                         class="btn btn-<%= lab.is_active ? 'warning' : 'success' %>"
-                        onclick="return confirm('<%= lab.is_active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?' %>')"
+                        onclick="return window.confirmAction(event, '<%= lab.is_active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?' %>')"
                     >
                         <%= lab.is_active ? 'Mark Lab Inactive' : 'Reactivate Lab' %>
                     </button>
@@ -389,7 +389,7 @@
             <% if (currentUser.activeRole === 'admin' || currentUser.can_view_statistics) { %>
                 <a href="/sessions/lab/<%= lab.id %>" class="btn btn-outline-dark btn-sm">View Full History</a>
             <% } else { %>
-                <button onclick="alert('You are not authorized to view this lab\'s full history.');" class="btn btn-outline-dark btn-sm">View Full History</button>
+                <button type="button" onclick="window.showAlert('You are not authorized to view this lab\'s full history.');" class="btn btn-outline-dark btn-sm">View Full History</button>
             <% } %>
         <% } %>
     </div>
@@ -584,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function() {
             button.textContent = active ? 'Mark Lab Inactive' : 'Reactivate Lab';
             button.setAttribute(
                 'onclick',
-                `return confirm('${active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?'}')`
+                `return window.confirmAction(event, '${active ? 'Mark this lab inactive? All currently checked-in students will be checked out without violations.' : 'Reactivate this lab?'}')`
             );
         }
         if (notice) {

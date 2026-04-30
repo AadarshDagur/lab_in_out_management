@@ -41,8 +41,8 @@
                                 <small><%= request.lab_name %></small>
                             </td>
                             <td><strong><%= request.requested_by_name %></strong></td>
-                            <td style="max-width: 250px;">
-                                <div style="max-height: 100px; overflow-y: auto; word-wrap: break-word; white-space: pre-wrap;" class="small">
+                            <td style="max-width: 250px; vertical-align: middle;">
+                                <div style="max-height: 100px; overflow-y: auto; word-wrap: break-word; white-space: pre-wrap; padding: 0;" class="small">
                                     <%= request.reason %>
                                 </div>
                             </td>
@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <small>${escapeHtml(request.lab_name)}</small>
                                 </td>
                                 <td><strong>${escapeHtml(request.requested_by_name)}</strong></td>
-                                <td class="text-break" style="max-width: 300px;">${escapeHtml(request.reason || '-')}</td>
+                                <td style="max-width: 250px; vertical-align: middle;"><div style="max-height: 100px; overflow-y: auto; word-wrap: break-word; white-space: pre-wrap; padding: 0;" class="small">${escapeHtml(request.reason || '-')}</div></td>
                                 <td>
                                     <div class="d-flex gap-2">
                                         <button

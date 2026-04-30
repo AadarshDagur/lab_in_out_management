@@ -129,8 +129,8 @@
                                     <td class="text-end">
                                         <% if (!item.locked) { %>
                                             <% if (currentUser.activeRole === 'admin' || currentUser.role === 'admin') { %>
-                                                <form action="/sessions/remove-violation/<%= item.id %>" method="POST" class="d-inline" onsubmit="return confirm('Remove this violation?')">
-                                                    <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
+                                                <form action="/sessions/remove-violation/<%= item.id %>" method="POST" class="d-inline remove-violation-form">
+                                                    <button type="button" class="btn btn-outline-danger btn-sm remove-violation-btn">Remove</button>
                                                 </form>
                                             <% } else if (currentUser.activeRole === 'assistant' || currentUser.activeRole === 'student+assistant') { %>
                                                 <% if (item.removal_request_status === 'pending') { %>
@@ -192,6 +192,29 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('requestRemovalForm').action = `/sessions/request-violation-removal/${violationId}`;
         });
     }
+
+    // Handle remove violation buttons with SweetAlert2
+    document.querySelectorAll('.remove-violation-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const form = btn.closest('form');
+            if (!form) return;
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: 'Remove this violation?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#1f4f8f',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, remove it!'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    HTMLFormElement.prototype.submit.call(form);
+                }
+            });
+        });
+    });
 
     const historyContent = document.getElementById('student-detail-history-content');
     const escapeHtml = (value) => String(value ?? '')

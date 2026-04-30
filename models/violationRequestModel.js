@@ -112,6 +112,20 @@ const ViolationRequest = {
     return result.rows[0];
   },
 
+  async deleteByViolationId(violationId) {
+    await db.query(
+      `DELETE FROM violation_removal_requests WHERE violation_id = $1`,
+      [violationId]
+    );
+  },
+
+  async deleteByViolationId(violationId) {
+    await db.query(
+      `DELETE FROM violation_removal_requests WHERE violation_id = $1`,
+      [violationId]
+    );
+  },
+
   async findByAssistant(assistantId, limit = 20) {
     const result = await db.query(
       `SELECT vrr.*, 

@@ -479,7 +479,7 @@
                 datasets: [{
                     label: 'Session Minutes',
                     data: values,
-                    backgroundColor: CHART_COLORS.slice(0, labels.length),
+                    backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
                     borderRadius: 6,
                     borderSkipped: false,
                 }]

@@ -7,9 +7,15 @@
             <h2 class="mb-1"><%= lab.name %> History</h2>
             <p class="muted-copy mb-0">Review past sessions recorded in this lab.</p>
         </div>
-        <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark btn-sm">
-            <i class="bi bi-arrow-left me-1"></i>Back to Lab
-        </a>
+        <% if (currentUser && (currentUser.activeRole === 'admin' || currentUser.role === 'admin')) { %>
+            <a href="/labs/manage" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Manage Labs
+            </a>
+        <% } else { %>
+            <a href="/labs/<%= lab.id %>" class="btn btn-outline-dark btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Lab
+            </a>
+        <% } %>
     </div>
 </section>
 

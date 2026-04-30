@@ -321,52 +321,6 @@ app.use(
 // Flash messages
 app.use(flash());
 
-let lastScheduleReconcileAt = 0;
-let scheduleReconcilePromise = null;
-
-async function reconcileLabSchedules() {
-  const intervalMs = Number(process.env.SCHEDULE_RECONCILE_INTERVAL_MS) || 60 * 1000;
-  const now = Date.now();
-
-  if (scheduleReconcilePromise) {
-    return scheduleReconcilePromise;
-  }
-
-  if (now - lastScheduleReconcileAt < intervalMs) {
-    return { closedSessions: [], openedLabs: [], closedLabs: [] };
-  }
-
-  lastScheduleReconcileAt = now;
-  scheduleReconcilePromise = (async () => {
-    const LabSession = require("./models/sessionModel");
-
-    const closedSessions = await LabSession.autoClosePastScheduledClose();
-
-    if (closedSessions.length > 0) {
-      const broadcast = app.get("broadcastLiveUpdate");
-      if (broadcast) await broadcast();
-    }
-
-    return { closedSessions, openedLabs: [], closedLabs: [] };
-  })().catch((err) => {
-    console.error("Request-time lab schedule reconciliation error:", err.message);
-    return { closedSessions: [], openedLabs: [], closedLabs: [] };
-  }).finally(() => {
-    scheduleReconcilePromise = null;
-  });
-
-  return scheduleReconcilePromise;
-}
-
-app.use(async (req, res, next) => {
-  try {
-    await reconcileLabSchedules();
-  } catch (err) {
-    console.error("Lab schedule middleware error:", err.message);
-  }
-  next();
-});
-
 // Set locals (user data + flash messages available in all views)
 app.use(setLocals);
 

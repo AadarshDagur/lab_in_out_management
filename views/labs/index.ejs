@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </form>`;
         } else if (role === 'assistant' && !active) {
             actions.innerHTML = `
-                <form action="/labs/${lab.id}/status" method="POST" class="mb-2 live-lab-status-form">
+                <form action="/labs/${lab.id}/status" method="POST" class="mb-2 page-refresh-form">
                     <input type="hidden" name="is_active" value="true">
                     <button type="submit" class="btn btn-success w-100 btn-lg"><i class="bi bi-power me-2"></i>Activate Lab</button>
                 </form>
@@ -112,6 +112,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     directory.addEventListener('submit', async function(event) {
+        const refreshForm = event.target.closest('.page-refresh-form');
+        if (refreshForm) {
+            sessionStorage.setItem('labsDirectoryScroll', window.scrollY);
+            return; // let form submit naturally
+        }
+        
         const form = event.target.closest('.live-lab-status-form');
         if (!form) return;
         event.preventDefault();
@@ -140,6 +146,13 @@ document.addEventListener('DOMContentLoaded', function() {
     renderAll(initialLabs);
     window.labRunAutoRefresh(refreshLabs, { force: true });
     setInterval(runLiveRefresh, 3000);
+
+    // Restore scroll position point
+    const savedScroll = sessionStorage.getItem('labsDirectoryScroll');
+    if (savedScroll) {
+        window.scrollTo(0, parseInt(savedScroll, 10));
+        sessionStorage.removeItem('labsDirectoryScroll');
+    }
 });
 </script>
 

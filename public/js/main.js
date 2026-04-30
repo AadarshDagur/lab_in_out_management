@@ -129,25 +129,13 @@ document.addEventListener("DOMContentLoaded", () => {
     form.addEventListener("submit", (e) => {
       if (password.value !== confirmPassword.value) {
         e.preventDefault();
-        alert("Passwords do not match!");
+        window.showAlert("Passwords do not match!", "error");
         confirmPassword.focus();
       }
     });
   }
 
-  // Confirm delete actions
-  const deleteForms = document.querySelectorAll('form[onsubmit*="confirm"]');
-  deleteForms.forEach((form) => {
-    const customMessage = form.dataset.confirm;
-    form.removeAttribute("onsubmit");
-    form.addEventListener("submit", (e) => {
-      const message =
-        customMessage || "Are you sure you want to delete this? This action cannot be undone.";
-      if (!confirm(message)) {
-        e.preventDefault();
-      }
-    });
-  });
+
 
   const imageUploadForms = document.querySelectorAll(".image-upload-form");
   imageUploadForms.forEach((form) => {
@@ -197,13 +185,13 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (!file.type.startsWith("image/")) {
-        alert("Please choose a valid image file.");
+        window.showAlert("Please choose a valid image file.", "error");
         resetPreview();
         return;
       }
 
       if (file.size > 2 * 1024 * 1024) {
-        alert("Please choose an image under 2 MB.");
+        window.showAlert("Please choose an image under 2 MB.", "error");
         resetPreview();
         return;
       }
@@ -223,7 +211,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       };
       reader.onerror = () => {
-        alert("Unable to read the selected image.");
+        window.showAlert("Unable to read the selected image.", "error");
         resetPreview();
       };
       reader.readAsDataURL(file);
@@ -294,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
       syncStudentId();
       if (!hiddenInput.value) {
         e.preventDefault();
-        alert("Please select a student from the search list.");
+        window.showAlert("Please select a student from the search list.", "error");
         searchInput.focus();
       }
     });

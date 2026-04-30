@@ -42,6 +42,65 @@ if (!window.labRunAutoRefresh) {
 <% if (typeof currentUser !== 'undefined' && currentUser) { %>
 <script src="/socket.io/socket.io.js"></script>
 <% } %>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+window.confirmAction = function(event, message) {
+    try {
+        event.preventDefault();
+        const el = event.currentTarget || event.target || event.srcElement;
+        const form = el && el.tagName === 'FORM' ? el : (el && el.closest ? el.closest('form') : null);
+        const anchor = el && el.tagName === 'A' ? el : (el && el.closest ? el.closest('a') : null);
+        
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: message,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#1f4f8f',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, proceed!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (form) {
+                        form.removeAttribute('onsubmit');
+                        const submitBtns = form.querySelectorAll('button[type="submit"]');
+                        submitBtns.forEach(btn => btn.removeAttribute('onclick'));
+                        HTMLFormElement.prototype.submit.call(form);
+                    } else if (anchor && anchor.href) {
+                        window.location.href = anchor.href;
+                    }
+                }
+            });
+        } else {
+            // Fallback if SweetAlert isn't loaded
+            if (confirm(message)) {
+                if (form) {
+                    form.removeAttribute('onsubmit');
+                    HTMLFormElement.prototype.submit.call(form);
+                } else if (anchor && anchor.href) {
+                    window.location.href = anchor.href;
+                }
+            }
+        }
+    } catch (err) {
+        console.error("ConfirmAction error:", err);
+        alert("An error occurred: " + err.message);
+    }
+    return false;
+};
+window.showAlert = function(message, icon = 'error') {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            text: message,
+            icon: icon,
+            confirmButtonColor: '#1f4f8f'
+        });
+    } else {
+        alert(message);
+    }
+};
+</script>
 <script src="/js/main.js"></script>
 </body>
 </html>
