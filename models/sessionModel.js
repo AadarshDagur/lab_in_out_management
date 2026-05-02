@@ -406,14 +406,10 @@ const LabSession = {
          AND ls.check_in_time < pd.close_at
          AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > pd.open_at
         JOIN users u ON ls.user_id = u.id
+         WHERE u.enrollment_no ~ '^[0-9]{4}[a-zA-Z]+[0-9]*$'
       )
       SELECT
-        CASE
-          WHEN enrollment_no ~ '^[0-9]{4}' THEN
-            SUBSTRING(enrollment_no FROM 1 FOR 4) || ' ' ||
-            UPPER(REGEXP_REPLACE(SUBSTRING(enrollment_no FROM 5), '[0-9]+$', ''))
-          ELSE COALESCE(department, 'Unknown')
-        END AS batch,
+        UPPER(SUBSTRING(enrollment_no FROM 1 FOR 4) || REGEXP_REPLACE(SUBSTRING(enrollment_no FROM 5), '[0-9]+$', '')) AS batch,
         ROUND(COALESCE(SUM(session_minutes), 0), 0)::int AS session_minutes
       FROM session_overlaps
       GROUP BY batch
