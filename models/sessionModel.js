@@ -185,61 +185,14 @@ const LabSession = {
     return result.rows[0];
   },
 
-  // Auto-close stale sessions (older than specified hours)
-  async autoCloseStale(hours = 12) {
-    const result = await db.query(
-      `UPDATE lab_sessions
-       SET check_out_time = CURRENT_TIMESTAMP,
-           duration_minutes = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - check_in_time)) / 60,
-           status = 'auto_closed'
-       WHERE status = 'active'
-         AND check_in_time < CURRENT_TIMESTAMP - INTERVAL '${hours} hours'
-       RETURNING *`
-    );
-    return result.rows;
-  },
 
-  async autoClosePastScheduledClose(nowTimestamp = getLocalTimestamp()) {
-    const result = await db.query(
-      `WITH candidates AS (
-         SELECT ls.id,
-                l.name AS lab_name,
-                ls.check_in_time,
-                CASE
-                  WHEN ls.check_in_time::time < TIME '21:00'
-                    THEN ls.check_in_time::date + TIME '21:00'
-                  ELSE ls.check_in_time::date + INTERVAL '1 day' + TIME '21:00'
-                END AS closed_at
-         FROM lab_sessions ls
-         JOIN labs l ON ls.lab_id = l.id
-         WHERE ls.status = 'active'
-           AND COALESCE(l.manual_active, FALSE) = FALSE
-       )
-       UPDATE lab_sessions ls
-       SET check_out_time = candidates.closed_at,
-           duration_minutes = EXTRACT(EPOCH FROM (candidates.closed_at - candidates.check_in_time)) / 60,
-           status = 'auto_closed'
-       FROM candidates
-       WHERE ls.id = candidates.id
-         AND candidates.closed_at IS NOT NULL
-         AND candidates.closed_at <= $1::timestamp
-         AND candidates.closed_at > candidates.check_in_time
-       RETURNING ls.*, candidates.lab_name`,
-      [nowTimestamp]
-    );
-    return result.rows;
-  },
 
   async getGlobalStatistics(startDate, endDate) {
     const result = await db.query(
       `WITH lab_days AS (
          SELECT l.id, l.capacity, d::date AS service_date,
-                d::timestamp + l.open_time AS open_at,
-                CASE
-                  WHEN l.open_time = l.close_time THEN d::timestamp + INTERVAL '1 day'
-                  WHEN l.open_time < l.close_time THEN d::timestamp + l.close_time
-                  ELSE d::timestamp + INTERVAL '1 day' + l.close_time
-                END AS close_at
+                d::timestamp AS open_at,
+                d::timestamp + INTERVAL '1 day' AS close_at
        FROM labs l
        CROSS JOIN generate_series($1::date, $2::date, INTERVAL '1 day') d
      ),
@@ -249,19 +202,21 @@ const LabSession = {
        ),
        session_overlaps AS (
          SELECT ld.id AS lab_id,
-                GREATEST(
-                  0,
-                  EXTRACT(EPOCH FROM (
-                    LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
-                    - GREATEST(ls.check_in_time, ld.open_at)
-                  )) / 60
-                ) AS occupied_minutes,
+                CASE WHEN ls.id IS NOT NULL THEN
+                  GREATEST(
+                    0,
+                    EXTRACT(EPOCH FROM (
+                      LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
+                      - GREATEST(ls.check_in_time, ld.open_at)
+                    )) / 60
+                  )
+                ELSE 0 END AS occupied_minutes,
                 ls.id AS session_id,
                 ls.user_id
          FROM lab_days ld
          LEFT JOIN lab_sessions ls
            ON ls.lab_id = ld.id
-          AND ls.status IN ('active', 'completed', 'auto_closed')
+          AND ls.status IN ('active', 'completed')
           AND ls.check_in_time < ld.close_at
           AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > ld.open_at
        )
@@ -302,13 +257,9 @@ const LabSession = {
          SELECT *
          FROM (
            WITH lab_days AS (
-             SELECT l.id, l.name, l.capacity, d::date AS service_date,
-                    d::timestamp + l.open_time AS open_at,
-                    CASE
-                      WHEN l.open_time = l.close_time THEN d::timestamp + INTERVAL '1 day'
-                      WHEN l.open_time < l.close_time THEN d::timestamp + l.close_time
-                      ELSE d::timestamp + INTERVAL '1 day' + l.close_time
-                    END AS close_at
+              SELECT l.id, l.name, l.capacity, d::date AS service_date,
+                     d::timestamp AS open_at,
+                     d::timestamp + INTERVAL '1 day' AS close_at
              FROM labs l
              CROSS JOIN generate_series($1::date, $2::date, INTERVAL '1 day') d
            ),
@@ -321,18 +272,18 @@ const LabSession = {
            ),
            occupied AS (
              SELECT ld.id AS lab_id,
-                  ROUND(COALESCE(SUM(GREATEST(
+                  ROUND(COALESCE(SUM(CASE WHEN ls.id IS NOT NULL THEN GREATEST(
                     0,
                     EXTRACT(EPOCH FROM (
                       LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
                       - GREATEST(ls.check_in_time, ld.open_at)
                     )) / 60
-                  )), 0), 0) AS occupied_minutes,
+                  ) ELSE 0 END), 0), 0) AS occupied_minutes,
                   COUNT(DISTINCT ls.id)::int AS total_sessions
            FROM lab_days ld
            LEFT JOIN lab_sessions ls
              ON ls.lab_id = ld.id
-            AND ls.status IN ('active', 'completed', 'auto_closed')
+            AND ls.status IN ('active', 'completed')
             AND ls.check_in_time < ld.close_at
             AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > ld.open_at
            GROUP BY ld.id
@@ -391,18 +342,18 @@ const LabSession = {
       ),
       occupied AS (
         SELECT ld.id AS lab_id,
-               COALESCE(SUM(GREATEST(
+               COALESCE(SUM(CASE WHEN ls.id IS NOT NULL THEN GREATEST(
                  0,
                  EXTRACT(EPOCH FROM (
                    LEAST(COALESCE(ls.check_out_time, CURRENT_TIMESTAMP), ld.close_at)
                    - GREATEST(ls.check_in_time, ld.open_at)
                  )) / 60
-               )), 0) AS occupied_minutes,
+               ) ELSE 0 END), 0) AS occupied_minutes,
                COUNT(DISTINCT ls.id)::int AS total_sessions
         FROM lab_days ld
         LEFT JOIN lab_sessions ls
           ON ls.lab_id = ld.id
-         AND ls.status IN ('active', 'completed', 'auto_closed')
+         AND ls.status IN ('active', 'completed')
          AND ls.check_in_time < ld.close_at
          AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > ld.open_at
         GROUP BY ld.id
@@ -451,7 +402,7 @@ const LabSession = {
         FROM period_days pd
         JOIN lab_sessions ls
           ON ls.lab_id = $1
-         AND ls.status IN ('active', 'completed', 'auto_closed')
+         AND ls.status IN ('active', 'completed')
          AND ls.check_in_time < pd.close_at
          AND COALESCE(ls.check_out_time, CURRENT_TIMESTAMP) > pd.open_at
         JOIN users u ON ls.user_id = u.id

@@ -1,11 +1,6 @@
 const db = require("../config/db");
 
-const LAB_OPEN_TIME = "09:00";
-const LAB_CLOSE_TIME = "21:00";
-
 const Lab = {
-  LAB_OPEN_TIME,
-  LAB_CLOSE_TIME,
 
   async findAll(activeOnly = true) {
     let query = "SELECT * FROM labs";
@@ -22,15 +17,13 @@ const Lab = {
 
   async create({ name, location, capacity }) {
     const result = await db.query(
-      `INSERT INTO labs (name, location, capacity, open_time, close_time)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO labs (name, location, capacity)
+       VALUES ($1, $2, $3)
        RETURNING *`,
       [
         name,
         location,
         capacity || 30,
-        LAB_OPEN_TIME,
-        LAB_CLOSE_TIME,
       ]
     );
     return result.rows[0];
@@ -39,13 +32,12 @@ const Lab = {
   async update(id, { name, location, capacity, is_active, manual_inactive, manual_active }) {
     const result = await db.query(
       `UPDATE labs SET name = COALESCE($1, name), location = COALESCE($2, location),
-       capacity = COALESCE($3, capacity), open_time = $4,
-       close_time = $5, is_active = COALESCE($6, is_active),
-       manual_inactive = COALESCE($7, manual_inactive),
-       manual_active = COALESCE($8, manual_active),
+       capacity = COALESCE($3, capacity), is_active = COALESCE($4, is_active),
+       manual_inactive = COALESCE($5, manual_inactive),
+       manual_active = COALESCE($6, manual_active),
        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9 RETURNING *`,
-      [name, location, capacity, LAB_OPEN_TIME, LAB_CLOSE_TIME, is_active, manual_inactive, manual_active, id]
+       WHERE id = $7 RETURNING *`,
+      [name, location, capacity, is_active, manual_inactive, manual_active, id]
     );
     return result.rows[0];
   },
@@ -82,13 +74,6 @@ const Lab = {
     return result.rows;
   },
 
-  async autoCloseAfterHours() {
-    return [];
-  },
-
-  async autoOpenDuringHours() {
-    return [];
-  },
 };
 
 module.exports = Lab;

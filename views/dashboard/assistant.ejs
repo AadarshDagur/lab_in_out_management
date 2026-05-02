@@ -255,7 +255,7 @@ document.addEventListener("DOMContentLoaded", function() {
                                 <% if (item.removal_request_status === 'pending') { %>
                                     <button type="button" class="btn btn-outline-secondary btn-sm" disabled>Request Submitted</button>
                                 <% } else if (item.removal_request_status === 'rejected') { %>
-                                    <button type="button" class="btn btn-outline-danger btn-sm" disabled>Removal Denied</button>
+                                    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#requestRemovalModal" data-violation-id="<%= item.id %>" data-student-name="<%= item.user_name %>">Send Removal Again</button>
                                 <% } else if (!item.locked) { %>
                                     <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#requestRemovalModal" data-violation-id="<%= item.id %>" data-student-name="<%= item.user_name %>">
                                         Request Removal

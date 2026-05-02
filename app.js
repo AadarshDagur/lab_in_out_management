@@ -112,7 +112,9 @@ async function ensureDatabaseCleanup() {
   try {
     await pool.query(`
       ALTER TABLE labs
-      DROP COLUMN IF EXISTS qr_token
+      DROP COLUMN IF EXISTS qr_token,
+      DROP COLUMN IF EXISTS open_time,
+      DROP COLUMN IF EXISTS close_time
     `);
 
     await pool.query(`
@@ -233,18 +235,6 @@ async function ensureLabManualInactiveColumn() {
   }
 }
 
-async function ensureFixedLabHours() {
-  try {
-    await pool.query(`
-      ALTER TABLE labs
-      ALTER COLUMN open_time SET DEFAULT '09:00',
-      ALTER COLUMN close_time SET DEFAULT '21:00'
-    `);
-    await pool.query("UPDATE labs SET open_time = '09:00', close_time = '21:00'");
-  } catch (error) {
-    console.error("Failed to ensure fixed lab hours:", error.message);
-  }
-}
 
 async function ensureViolationRemovalRequestsTable() {
   try {
@@ -634,40 +624,11 @@ function ensureAppReady() {
       await ensureCanViewStatisticsColumn();
       await ensureViolationLockedColumn();
       await ensureLabManualInactiveColumn();
-      await ensureFixedLabHours();
+
       await ensureViolationRemovalRequestsTable();
       await ensureAuditLogsTable();
       
-      try {
-        const LabSession = require("./models/sessionModel");
-        const scheduledClosed = await LabSession.autoClosePastScheduledClose();
-        if (scheduledClosed && scheduledClosed.length > 0) {
-            console.log(`[Auto-Close] Automatically closed ${scheduledClosed.length} sessions at their scheduled lab close time.`);
-        }
-
-        const closed = await LabSession.autoCloseStale(16); // fallback for unusually stale sessions
-        if (closed && closed.length > 0) {
-            console.log(`[Auto-Close] Automatically closed ${closed.length} stale sessions from yesterday.`);
-        }
-
-        // Keep active sessions aligned with the scheduled 9 PM close time.
-        setInterval(async () => {
-          try {
-            const LabSession = require("./models/sessionModel");
-            const scheduledClosed = await LabSession.autoClosePastScheduledClose();
-            if (scheduledClosed && scheduledClosed.length > 0) {
-                console.log(`[Auto-Close] Automatically closed ${scheduledClosed.length} sessions at their scheduled lab close time.`);
-                broadcastLiveUpdate();
-            }
-
-          } catch(e) {
-            console.error("Periodic lab status update error:", e);
-          }
-        }, 60000); // 1 minute checks
-
-      } catch (err) {
-        console.error("Failed to auto-close stale sessions:", err.message);
-      }
+      // Auto-close functionality has been removed to prevent statistics errors.
     })().catch((error) => {
       bootstrapPromise = null;
       throw error;
