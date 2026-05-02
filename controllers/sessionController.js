@@ -455,7 +455,7 @@ const sessionController = {
           action: "REQUEST_VIOLATION_REMOVAL",
           targetType: "violation",
           targetId: violationId,
-          details: `Assistant requested removal of violation for ${violation.user_name}`,
+          details: `Assistant requested removal of violation for ${violation.enrollment_no}`,
           ipAddress: req.ip,
         });
         req.flash("success", "Violation removal request submitted to admin for approval.");
@@ -495,7 +495,7 @@ const sessionController = {
           action: "APPROVE_REMOVAL_REQUEST",
           targetType: "request",
           targetId: requestId,
-          details: `Approved removal request by ${request.requested_by_name} for ${student.name}`,
+          details: `Approved removal request by ${request.requested_by_name} for ${student.enrollment_no}`,
           ipAddress: req.ip,
         });
 
@@ -515,6 +515,7 @@ const sessionController = {
   async rejectRemoval(req, res) {
     try {
       const requestId = req.params.id;
+      const requestDetails = await ViolationRequest.findById(requestId);
       await ViolationRequest.reject(requestId, req.session.user.id);
 
       await AuditLog.log({
@@ -523,7 +524,7 @@ const sessionController = {
         action: "REJECT_REMOVAL_REQUEST",
         targetType: "request",
         targetId: requestId,
-        details: `Rejected removal request`,
+        details: `Rejected removal request for ${requestDetails ? requestDetails.enrollment_no : 'Unknown'}`,
         ipAddress: req.ip,
       });
 
